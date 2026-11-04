@@ -1,0 +1,24 @@
+name: Terraform Validation
+on:
+  pull_request:
+    paths:
+      - 'game-packs/aws-event-driven/terraform/**'
+      - '.github/workflows/terraform-validate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: game-packs/aws-event-driven/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Format Terraform
+        run: terraform fmt -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate

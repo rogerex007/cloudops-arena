@@ -1,0 +1,130 @@
+id: aws-event-driven
+title: "Todo empieza con un evento"
+subtitle: "Construye una arquitectura serverless en AWS con Terraform y DevOps"
+version: 1.0.0
+difficulty: beginner
+duration_minutes: 240
+team:
+  min_members: 3
+  max_members: 5
+technologies:
+  - AWS Lambda
+  - Amazon EventBridge
+  - Amazon SQS
+  - Amazon DynamoDB
+  - Terraform
+  - GitHub Actions
+scoring:
+  total_points: 100
+  bonus_points: 5
+missions:
+  - id: mission-01
+    title: "Diseña el flujo"
+    type: quiz
+    category: architecture
+    duration_minutes: 15
+    points: 10
+    description: "Identifica cómo desacoplar el servicio de órdenes de los servicios de pago e inventario."
+    instructions:
+      - "Revisa el diagrama de arquitectura del Game Pack."
+      - "Piensa qué componente debe recibir el evento y distribuirlo a varios consumidores."
+      - "Responde el checkpoint del equipo."
+    quiz:
+      question: "¿Qué servicio permite enrutar eventos a diferentes destinos usando reglas y patrones de filtrado?"
+      options:
+        - "Amazon EC2"
+        - "Amazon EventBridge"
+        - "Amazon EBS"
+        - "AWS CloudTrail"
+    answer: "Amazon EventBridge"
+  - id: mission-02
+    title: "Provisiona la infraestructura"
+    type: lab
+    category: iac
+    duration_minutes: 35
+    points: 15
+    workflow_points: 14
+    repository_link_points: 1
+    workflow: ".github/workflows/terraform-lab.yml"
+    description: "Vincula el repositorio de GitHub de tu equipo, revisa los recursos del laboratorio y valida el plan de infraestructura con Terraform y Floci."
+    resources:
+      - name: "Amazon API Gateway HTTP API"
+        purpose: "Expone el endpoint HTTP para crear órdenes."
+      - name: "AWS Lambda"
+        purpose: "Ejecuta la función de órdenes y los consumidores de pagos e inventario."
+      - name: "Amazon EventBridge"
+        purpose: "Recibe OrderCreated y lo enruta a los dos consumidores."
+      - name: "Amazon SQS"
+        purpose: "Desacopla el procesamiento de pagos e inventario; cada cola tiene una Dead Letter Queue."
+      - name: "Amazon DynamoDB"
+        purpose: "Guarda las órdenes y las claves de idempotencia de los consumidores."
+      - name: "IAM"
+        purpose: "Otorga a las funciones los permisos necesarios para su trabajo."
+    instructions:
+      - "Usa el repositorio de GitHub que el instructor preparó para tu equipo; debe contener game-packs/aws-event-driven/terraform y .github/workflows/terraform-lab.yml, y el runner asignado debe tener acceso al repositorio."
+      - "En el formulario de esta misión, pega la URL HTTPS del repositorio. Arena la vincula al equipo y, al confirmarlo, el equipo recibe 1 punto. Esto no concede permisos en GitHub."
+      - "Revisa los recursos listados y sigue el flujo Orden HTTP → Lambda Orders → EventBridge → SQS de pagos e inventario → Lambdas consumidoras."
+      - "Abre el directorio game-packs/aws-event-driven/terraform en el runner de laboratorio asignado por el instructor."
+      - "Ejecuta terraform fmt -recursive, terraform init, terraform validate y terraform plan con el prefijo único del equipo."
+      - "En GitHub, abre Actions → Terraform Lab Provisioning → Run workflow; selecciona la rama predeterminada del repositorio."
+      - "Introduce el prefijo único que te asignó el instructor y deja apply desactivado. El workflow ejecuta fmt, init, validate y plan."
+      - "Revisa el plan. Solo el instructor puede autorizar apply después de revisarlo."
+      - "Un workflow exitoso en la rama predeterminada otorga los 14 puntos restantes."
+      - "No cambies los endpoints de Floci, no uses credenciales reales de AWS y no ejecutes terraform apply fuera del runner aislado autorizado por el instructor."
+  - id: mission-03
+    title: "Publica y procesa una orden"
+    type: lab
+    category: serverless
+    duration_minutes: 40
+    points: 20
+    workflow: ".github/workflows/app-integration-tests.yml"
+    description: "Implementa el flujo de creación de órdenes y procesamiento asíncrono."
+    instructions:
+      - "La función Orders debe guardar la orden en DynamoDB."
+      - "Debe publicar OrderCreated en EventBridge."
+      - "EventBridge debe enrutar el evento a las colas de pagos e inventario."
+      - "Las funciones consumidoras deben procesar los mensajes recibidos desde SQS."
+  - id: mission-04
+    title: "Resiliencia: duplicados y mensajes fallidos"
+    type: incident
+    category: resilience
+    duration_minutes: 45
+    points: 30
+    workflow: ".github/workflows/lab-integration-tests.yml"
+    description: "Demuestra idempotencia y recuperación frente a fallos controlados."
+    instructions:
+      - "Entrega dos veces el mismo evento OrderCreated."
+      - "Demuestra que el pago simulado no se registra dos veces."
+      - "Activa el fallo controlado del consumidor de pagos."
+      - "Verifica el comportamiento de reintentos y la Dead Letter Queue."
+  - id: mission-05
+    title: "Automatiza la entrega"
+    type: pipeline
+    category: devops
+    duration_minutes: 35
+    points: 25
+    workflow: ".github/workflows/terraform-validate.yml"
+    description: "Valida la infraestructura desde un flujo automatizado de GitHub Actions."
+    instructions:
+      - "Revisa el workflow de GitHub Actions."
+      - "Asegura que se ejecuten terraform fmt, validate y las pruebas del laboratorio."
+      - "No almacenes access keys de AWS en GitHub Secrets."
+      - "Explica cómo OIDC permite obtener credenciales temporales en un entorno AWS real."
+  - id: mission-06
+    title: "Bonus: IA para ingeniería cloud"
+    type: bonus
+    category: ai
+    duration_minutes: 15
+    points: 5
+    description: "Utiliza IA para proponer una hipótesis de causa raíz y una prueba verificable."
+    instructions:
+      - "Entrega a un asistente de IA un log anonimizado y un fragmento de código sin secretos."
+      - "Pide una hipótesis y una posible corrección."
+      - "Valida la propuesta con una prueba reproducible."
+      - "Documenta un riesgo o limitación de la respuesta de la IA."
+
+github_workflows:
+  ".github/workflows/terraform-lab.yml": "mission-02"
+  ".github/workflows/app-integration-tests.yml": "mission-03"
+  ".github/workflows/lab-integration-tests.yml": "mission-04"
+  ".github/workflows/terraform-validate.yml": "mission-05"

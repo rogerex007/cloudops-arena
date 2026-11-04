@@ -1,0 +1,12 @@
+.lab-resources,.lab-repository{margin-top:22px;padding-top:18px;border-top:1px solid rgba(148,163,184,.15)}
+.lab-resources h4,.lab-step-heading h4{margin:0 0 12px;color:#e3edf7;font-size:14px}
+.lab-resource-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px}
+.lab-resource{display:grid;gap:5px;padding:12px;border:1px solid rgba(148,163,184,.14);border-radius:8px;background:rgba(9,18,31,.45)}
+.lab-resource b{color:#7dcfff;font-size:12px}
+.lab-resource span,.lab-step-heading p{color:#9aadc1;font-size:11px;line-height:1.55}
+.lab-step-heading{display:flex;align-items:flex-start;gap:10px;color:#73caff}
+.lab-step-heading h4{margin:0 0 4px}
+.lab-step-heading p{margin:0 0 14px}
+.lab-repository-connected{display:flex;align-items:flex-start;gap:8px;padding:12px;border:1px solid rgba(74,222,128,.2);border-radius:8px;background:rgba(74,222,128,.06);color:#86efac;font-size:12px}
+.lab-repository-connected a{display:inline-flex;align-items:center;gap:5px;margin-left:4px;color:#8bd5ff;overflow-wrap:anywhere}
+.lab-repository-points{margin-top:12px;color:#91a5ba;font-size:11px;line-height:1.6}

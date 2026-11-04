@@ -1,0 +1,33 @@
+name: Resilience Lab Validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resilience:
+    # Isolated, disposable runner dedicated to this team's Floci instance.
+    runs-on: [self-hosted, cloudops-arena, floci]
+    defaults:
+      run:
+        working-directory: game-packs/aws-event-driven/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Inject payment processor failure
+        run: terraform apply -auto-approve -var='use_floci=true' -var='endpoint_url=http://127.0.0.1:4566' -var='lambda_endpoint_url=http://floci:4566' -var='fail_payments=true'
+      - name: Validate duplicate delivery and DLQ behavior
+        env:
+          AWS_ENDPOINT_URL: http://127.0.0.1:4566
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+          ORDERS_API_URL: ${{ vars.ORDERS_API_URL }}
+          NAME_PREFIX: ${{ vars.NAME_PREFIX }}
+        run: |
+          python -m pip install boto3
+          python ../tests/resilience_test.py
+      - name: Restore payment processor
+        if: always()
+        run: terraform apply -auto-approve -var='use_floci=true' -var='endpoint_url=http://127.0.0.1:4566' -var='lambda_endpoint_url=http://floci:4566' -var='fail_payments=false'

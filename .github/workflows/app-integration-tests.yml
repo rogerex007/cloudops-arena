@@ -1,0 +1,23 @@
+name: Application Integration Tests
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: [self-hosted, cloudops-arena, floci]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install boto3
+      - name: Run order and consumer smoke test
+        env:
+          AWS_ENDPOINT_URL: http://127.0.0.1:4566
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+          ORDERS_API_URL: ${{ vars.ORDERS_API_URL }}
+          NAME_PREFIX: ${{ vars.NAME_PREFIX }}
+        run: python game-packs/aws-event-driven/tests/smoke_test.py

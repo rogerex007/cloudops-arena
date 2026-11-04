@@ -1,0 +1,33 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+*.tfvars
+!*.tfvars.example
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+.terraform.lock.hcl
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+
+# Build artifacts
+build/
+*.zip
+game-packs/**/terraform/.build/*
+!game-packs/**/terraform/.build/.gitkeep
+
+# Local emulator data
+infra/local/data/

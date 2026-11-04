@@ -1,0 +1,72 @@
+name: cloudops-arena
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: arena-floci
+    user: "0:0"
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_DEFAULT_ACCOUNT_ID: "000000000001"
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      FLOCI_SERVICES_LAMBDA_DOCKER_NETWORK: cloudops-arena_default
+      # IAM enforcement is available in Floci but remains off in this local demo.
+      # Turn it on only after the per-team policy suite is configured and tested.
+    volumes:
+      - floci-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  init-lab:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["sh", "-c", "python scripts/init_floci.py && python scripts/seed_demo.py"]
+    environment:
+      DYNAMODB_ENDPOINT_URL: http://floci:4566
+      DYNAMODB_TABLE_NAME: CloudOpsArena
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      floci:
+        condition: service_started
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: arena-api
+    environment:
+      ENVIRONMENT: local
+      DEMO_MODE: "true"
+      JWT_SECRET: local-only-change-this-secret-before-deploying-123456
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change-me-now
+      DYNAMODB_ENDPOINT_URL: http://floci:4566
+      DYNAMODB_REGION: us-east-1
+      DYNAMODB_TABLE_NAME: CloudOpsArena
+      GAME_PACKS_DIR: /app/game-packs
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      init-lab:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../../apps/web
+    container_name: arena-web
+    # Expose the portal to the local network so participants can open it
+    # from their own laptops using the host machine's LAN IP.
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  floci-data:
