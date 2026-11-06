@@ -250,7 +250,7 @@ def test_participant_connects_github_repository_for_one_point(monkeypatch):
         "awarded": True, "points": 1,
     }
     operations = table.meta.client.transactions[0]
-    assert len(operations) == 3
+    assert len(operations) == 4
     update = operations[0]["Update"]
     assert update["ExpressionAttributeValues"][":point"]["N"] == "1"
     assert update["ExpressionAttributeValues"][":repo"]["S"] == "cloudops/team-xyz"

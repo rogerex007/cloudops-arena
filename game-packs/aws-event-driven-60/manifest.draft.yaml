@@ -1,0 +1,76 @@
+# Not named manifest.yaml: do not advertise an event until its live-lab
+# validators, console and lifecycle pass acceptance tests.
+id: aws-event-driven-60
+title: "Todo empieza con un evento · 60 minutos"
+version: 0.1.0
+status: draft
+difficulty: beginner
+duration_minutes: 60
+participation_modes: [individual]
+team:
+  min_members: 1
+  max_members: 1
+technologies: [AWS Lambda, Amazon EventBridge, Amazon SQS, Amazon DynamoDB, Terraform, GitHub Actions]
+lab:
+  provider: floci-kvm
+  lifecycle: persistent-per-participant
+  submission_transport: github-actions-oidc
+  participant_capacity: 50
+  active_capacity: 2
+  inactive_view: timestamped-snapshot
+  expose_sdk_endpoint: false
+  # Fast educational retries; requires matching the reviewed variant template.
+  queue_visibility_seconds: 5
+  queue_max_receive_count: 2
+scoring:
+  total_points: 100
+  bonus_points: 0
+missions:
+  - id: mission-01
+    title: "Sigue el evento"
+    type: quiz
+    category: architecture
+    duration_minutes: 5
+    points: 10
+    description: "Reconoce cómo EventBridge desacopla Orders de los consumidores."
+    instructions:
+      - "Entra al evento y revisa el recorrido Orders → EventBridge → SQS → consumidores."
+    quiz:
+      question: "¿Qué servicio distribuye OrderCreated hacia pagos e inventario?"
+      options: [Amazon EC2, Amazon EventBridge, Amazon EBS, AWS CloudTrail]
+    answer: Amazon EventBridge
+  - id: mission-02
+    title: "Despliega y explora tu cuenta emulada"
+    type: lab
+    category: iac
+    duration_minutes: 15
+    points: 20
+    description: "Aplica la infraestructura revisada y encuentra sus recursos en tu consola."
+    instructions:
+      - "Solicita el despliegue desde Actions; Arena verifica el repositorio y el commit."
+      - "Espera tu turno y localiza tablas, Lambdas, bus, colas y DLQs."
+      - "Los puntos requieren un apply y un inventario verificados; generar un plan no basta."
+  - id: mission-03
+    title: "Completa Orders y observa el flujo"
+    type: lab
+    category: serverless
+    duration_minutes: 20
+    points: 40
+    description: "Implementa Orders; Payments e Inventory se entregan preparados."
+    instructions:
+      - "Guarda la orden y publica OrderCreated en el bus desplegado."
+      - "Entrega mediante Actions para actualizar Orders en tu playground."
+      - "Comprueba la orden y las operaciones de ambos consumidores sobre tus recursos de misión 02."
+  - id: mission-04
+    title: "Recupera Payments"
+    type: incident
+    category: resilience
+    duration_minutes: 15
+    points: 30
+    description: "Investiga un fallo controlado, su DLQ y la recuperación en el mismo laboratorio."
+    instructions:
+      - "Activa el incidente acotado de Payments y envía una orden de prueba."
+      - "Observa que Inventory continúa y Payments agota reintentos hasta la DLQ."
+      - "Desactiva el fallo y recupera el mensaje sin repetir una operación ya aceptada."
+closing_minutes: 5
+github_workflows: {}

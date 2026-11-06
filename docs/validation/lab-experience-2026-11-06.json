@@ -1,0 +1,49 @@
+{
+  "status": "passed",
+  "tested_at_utc": "2026-11-06T04:09:24.340714+00:00",
+  "api_tests": 213,
+  "web_tests": 8,
+  "typescript_vite": "passed",
+  "real_vm_and_currency_checks": {
+    "status": "passed",
+    "duplicate_hint_requests": 12,
+    "spend_once": true,
+    "coin_reward": 10,
+    "deadline_rejects_new_submissions": true,
+    "pause_freezes_time": true,
+    "working_lab_survives_failed_retry": true,
+    "successful_generation_retires_previous": true,
+    "no_duplicate_points_or_coins": true,
+    "seconds": 362.4
+  },
+  "origin_load": {
+    "status": "passed",
+    "authenticated_sessions": 50,
+    "http_reads": 450,
+    "origin_p95_ms": 59.8,
+    "origin_max_ms": 105.5,
+    "seconds": 20.5,
+    "wallets_isolated": true,
+    "unbought_hints_hidden": true,
+    "no_reference_inventory": true
+  },
+  "visual_review": {
+    "authenticated_visual_check": "passed",
+    "desktop": [
+      1440,
+      1000
+    ],
+    "mobile": [
+      390,
+      844
+    ],
+    "mobile_horizontal_overflow": false,
+    "hint_shop_visible": true,
+    "demo_badge_removed": true
+  },
+  "fifty_simultaneous_vms": false,
+  "full_workshop_under_load": false,
+  "periodic_lost_ack_recovery": "passed with real API receipt callback and scoped filesystem fixtures",
+  "graceful_handler_drain": "passed",
+  "previous_lab_expiry_guard": "passed"
+}

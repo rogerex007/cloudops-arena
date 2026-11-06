@@ -8,6 +8,21 @@ CloudOps Arena is a Game Pack-driven platform. The platform owns the event lifec
 
 ## Product principles
 
+La experiencia del taller incorpora reloj autoritativo por misión, monedas por
+finalización y pistas compradas sin restar puntos. El laboratorio mantiene un
+cupo por participante y retira generaciones antiguas después de confirmar el
+reemplazo. Consulta [operación del taller](docs/workshop-experience.md) para
+activar tiempos, pausar, administrar la partida y conocer las pruebas realizadas.
+
+El piloto de playgrounds persistentes y la variante de una hora se describen en
+[Playgrounds](docs/playgrounds.md). Misión 02 admite validar y desplegar desde
+Actions: el plan no puntúa; el apply verificado publica el inventario del commit
+en «Mi playground». Descarga el kit revisión 3 y agrega su paso de deploy.
+No se muestra infraestructura de referencia como trabajo del participante.
+Véase [misión 02: deploy](docs/mission-02-deploy.md).
+En Linux/KVM, `./scripts/deploy-edge.sh` despliega API, web, evaluador y gestor con
+el límite compartido de dos VMs. No elimina los volúmenes existentes.
+
 1. **One engine, many Game Packs.** Do not hard-code a specific workshop into the platform.
 2. **Provider-neutral lab lifecycle.** A Game Pack declares what it needs; a provider adapter determines where it can run.
 3. **No participant AWS keys.** Students interact with the portal and GitHub. Lab execution runs through controlled, isolated runners.
@@ -166,6 +181,46 @@ The API also exposes `GET /api/v1/admin/game-packs` for the currently available 
 
 ## GitHub workflow validation
 
+### Register an evaluation request
+
+Mission 02 includes **Download starter kit (.zip)** in the participant portal.
+It supplies the correct repository layout, Terraform base, Lambda exercise stubs
+and a Spanish browser-only upload guide. The archive is versioned with the Game
+Pack and includes a file-hash manifest. Only registered participants with the
+mission active or completed can download it; official validators, quiz answers,
+credentials and reference Lambda implementations are excluded.
+
+Participants submit technical missions exclusively through GitHub Actions OIDC.
+The event must be open and the matching mission active; the commit is taken from
+the signed identity, not pasted into Arena. The old participant SHA POST returns
+410. The portal discovers Actions deliveries and shows their live stages.
+
+Mission 02 has separate plan and deploy operations: the plan grants no technical
+points; deploy applies verified commit files in a private persistent VM and
+atomically publishes evidence, inventory provenance and points. Starter revision
+3 asks the learner to add the deploy step. See [mission 02](docs/mission-02-deploy.md).
+Mission 03 grades the
+Orders/Payments/Inventory handlers against DynamoDB, EventBridge and SQS inside
+Floci in the same isolation model. The judge invokes Python handlers rather than
+the Lambda service; it does not apply participant Terraform. Download the
+mission-03 guide/workflow from the portal without overwriting existing code.
+Mission 04 adds observable duplicate protection, partial failures, native SQS
+retries/DLQ and recovery with a root-owned simulated-operation receiver. It awards
+30 points once and requires adapting the consumers to `OPERATIONS_URL`.
+See [mission 03](docs/mission-03.md), [mission 04](docs/mission-04.md), [Actions setup](docs/github-actions-live.md)
+and [runner setup](docs/github-app-and-runner.md).
+
+Only one evaluation may be pending per team across missions. Failed/blocked
+commits can be retried from Run workflow with `retry`, up to five attempts.
+Previous approvals remain valid and cannot award points twice.
+
+### Existing workflow webhook
+
+The edge preview disables legacy workflow-based grading with
+`GITHUB_LEGACY_SCORING_ENABLED=false`. Starter workflow checks and file presence
+do not award lab points; the isolated official validator grades authorized plans. The API now also defaults to disabling this legacy path; it remains an explicit
+compatibility setting only.
+
 The API endpoint is:
 
 ```text
@@ -184,9 +239,13 @@ curl -X PATCH \
   -d '{"repo_name":"your-org/team-001","repo_url":"https://github.com/your-org/team-001"}'
 ```
 
-The workflow files are templates. The Terraform lab workflows require a disposable self-hosted runner connected to the correct team Floci endpoint. Never attach the lab runner labels to an ordinary developer workstation or a shared runner with cross-team access.
+The mission-02/03/04 starter workflows coordinate the official VM judge through OIDC on GitHub-hosted runners. Root workflow examples skip when `ARENA_EVENT_ID` is unset. Later mission workflows are still templates and cannot approve official evaluations.
 
 ## AWS-hosted control plane foundation
+
+For a restricted preview hosted on the local Linux machine at `arena.costacorp.net`,
+see [Cloudflare Tunnel preview](docs/cloudflare-preview.md). This is a separate
+deployment from the local demo and does not yet implement participant runners.
 
 A separate Terraform foundation lives in `infra/aws-control-plane`. It provisions a DynamoDB table, API Lambda, HTTP API Gateway, CloudFront distribution and a private S3 origin.
 
@@ -212,6 +271,10 @@ The web deployment script requires AWS CLI, Node.js/npm and Terraform. The Lambd
 | POST | `/api/v1/auth/admin/login` | Instructor login |
 | GET | `/api/v1/participant/dashboard` | Participant missions and team progress |
 | POST | `/api/v1/participant/missions/{id}/answer` | Submit a quiz checkpoint |
+| POST | `/api/v1/actions/evaluations` | Request a technical evaluation using signed GitHub Actions OIDC |
+| GET | `/api/v1/actions/evaluations/{event_id}/{id}` | Read an evaluation using GitHub Actions OIDC |
+| POST | `/api/v1/participant/missions/{id}/evaluations` | Retired: returns 410; use the Actions workflow |
+| GET | `/api/v1/participant/missions/{id}/materials` | Download the authenticated, versioned starter ZIP |
 | GET | `/api/v1/leaderboard` | Team leaderboard |
 | GET | `/api/v1/admin/dashboard` | Instructor overview |
 | GET | `/api/v1/admin/game-packs` | Available Game Packs |
@@ -226,3 +289,19 @@ Interactive API documentation: `/docs`.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+El kit revisión 2 permite solicitar la evaluación oficial desde GitHub Actions
+con OIDC y ver sus etapas en vivo en Arena. Configura la ruta de máquinas de
+Cloudflare y la variable del evento siguiendo
+[GitHub Actions y progreso en vivo](docs/github-actions-live.md).
+
+Para eventos de 50 participantes, el despliegue edge incorpora una cola global
+de 50 entregas y dos VMs simultáneas, posiciones de espera y protecciones de
+memoria/disco. Las pruebas de origen con 50 registros y 300 lecturas pasaron;
+[capacidad medida, límites y configuración](docs/capacity-50.md). Esto controla
+las evaluaciones actuales, no implementa aún playgrounds persistentes.
+
+La consola del instructor se abre en `/instructor`; la portada solo muestra
+participantes y sus sesiones se conservan por separado. Configura Cloudflare
+Access únicamente para el panel y sus APIs siguiendo
+[la guía de acceso del instructor](docs/instructor-access.md).

@@ -1,0 +1,21 @@
+# Standalone acceptance test. This does not join the public Arena networks.
+# Build the cached guest base first; see docs/playgrounds.md.
+name: arena-playground-pilot
+services:
+  pilot:
+    image: cloudops-arena-playground-pilot:local
+    build:
+      context: ../..
+      dockerfile: apps/playground/Dockerfile
+    devices: [/dev/kvm:/dev/kvm]
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    mem_limit: 8g
+    cpus: 4
+    pids_limit: 256
+    volumes: [playground-pilot:/work]
+    restart: "no"
+volumes:
+  playground-pilot:

@@ -1,5 +1,11 @@
 .git
 .gitignore
+**/.env
+**/.env.*
+**/.secrets
+.aws
+.agents
+.codex
 **/__pycache__
 **/.pytest_cache
 **/.venv

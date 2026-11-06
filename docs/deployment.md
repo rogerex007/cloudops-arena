@@ -4,6 +4,10 @@
 
 Use Docker Compose instructions in the root README. The local stack is intended for development only.
 
+For a separate instructor preview on the local Linux host using `arena.costacorp.net`, follow
+[the Cloudflare Tunnel guide](cloudflare-preview.md). It uses fresh credentials,
+no demo seed or Docker socket, and an opt-in tunnel behind Cloudflare Access.
+
 ## AWS control plane foundation
 
 `infra/aws-control-plane` is a Terraform foundation for a serverless control plane:

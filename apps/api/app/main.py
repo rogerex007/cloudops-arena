@@ -22,10 +22,37 @@ from .db import dynamodb_client, get_item, query_partition, scan_items, table_re
 from .gamepack import get_mission, load_pack, public_missions
 from .security import create_token, require_admin, require_participant
 from .providers import FlociProvider, AwsSandboxProvider
+from .evaluations import router as evaluations_router, public_evaluation, queue_summary
+from .materials import router as materials_router
+from .github_app import router as github_router, connection_status
+from .actions import router as actions_router
+from .live_evaluations import router as live_evaluations_router
+from .playgrounds import router as playgrounds_router
+from .hints import router as hints_router,wallet,catalog
+from .mission_clock import clock,require_time,deadline_condition
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cloudops-arena")
 app = FastAPI(title=settings.app_name, version="0.1.1", description="Reusable, Game Pack-driven technology GameDay platform")
+app.include_router(evaluations_router)
+app.include_router(materials_router)
+app.include_router(github_router)
+app.include_router(actions_router)
+app.include_router(live_evaluations_router)
+app.include_router(playgrounds_router)
+app.include_router(hints_router)
+
+
+class OAuthAccessFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.args, tuple) and len(record.args) >= 3 and str(record.args[2]).startswith('/api/v1/github/callback'):
+            args = list(record.args)
+            args[2] = '/api/v1/github/callback'
+            record.args = tuple(args)
+        return True
+
+
+logging.getLogger('uvicorn.access').addFilter(OAuthAccessFilter())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -64,6 +91,7 @@ class EventStatusRequest(BaseModel):
 
 class ActivateMissionRequest(BaseModel):
     mission_id: str
+    duration_minutes: int | None = Field(default=None,ge=1,le=240)
 
 
 class EventCreateRequest(BaseModel):
@@ -248,7 +276,7 @@ def transact_registration(client, operations: list[dict]) -> None:
             time.sleep(0.05 * (2 ** attempt))
 
 
-def award_mission(event_id: str, team_id: str, mission: dict, source: str, run_id: str | None = None) -> bool:
+def award_mission(event_id: str, team_id: str, mission: dict, source: str, run_id: str | None = None, participant_id: str | None = None) -> bool:
     client = dynamodb_client()
     points = int(mission.get("workflow_points", mission.get("points", 0)))
     submission_id = f"{team_id}#{mission['id']}"
@@ -282,7 +310,13 @@ def award_mission(event_id: str, team_id: str, mission: dict, source: str, run_i
                     "ConditionExpression": "attribute_exists(PK)",
                 }
             },
-        ])
+        ]+([{'ConditionCheck':{'TableName':settings.dynamodb_table_name,
+            'Key':{'PK':{'S':f'EVENT#{event_id}'},'SK':{'S':'META'}},
+            'ConditionExpression':'#s = :open AND active_mission_id = :mission AND '+deadline_condition(),
+            'ExpressionAttributeNames':{'#s':'status'},
+            'ExpressionAttributeValues':{':open':{'S':'open'},':mission':{'S':mission['id']},':clock_now':{'N':str(int(time.time()))}}}}] if source=='quiz' else [])+([{'ConditionCheck':{'TableName':settings.dynamodb_table_name,
+                'Key':{'PK':{'S':f'EVENT#{event_id}'},'SK':{'S':'USER#'+participant_id}},
+                'ConditionExpression':'team_id = :team','ExpressionAttributeValues':{':team':{'S':team_id}}}}] if participant_id else []))
         return True
     except client.exceptions.TransactionCanceledException:
         return False
@@ -489,11 +523,15 @@ def me(principal: dict = Depends(require_participant)):
 def participant_dashboard(principal: dict = Depends(require_participant)):
     event_id = principal["event_id"]
     rows = query_partition(f"EVENT#{event_id}")
+    member=next((row for row in rows if row.get('SK')=='USER#'+principal['sub']),None)
+    if not member or member.get('team_id')!=principal['team_id']:
+        raise HTTPException(403,'Tu registro en este evento ya no está disponible.')
     team = next((x for x in rows if x.get("type") == "team" and x.get("team_id") == principal["team_id"]), None)
     event = next((x for x in rows if x.get("type") == "event"), None)
     if not team or not event:
         raise HTTPException(404, "Event or team not found")
     pack = load_pack(event.get("game_pack", "aws-event-driven"))
+    timing=clock(event)
     completed = {x.get("mission_id") for x in rows if x.get("type") == "submission" and x.get("team_id") == principal["team_id"] and x.get("status") == "passed"}
     repository_link_awarded = any(
         row.get("SK") == f"SUB#{principal['team_id']}#mission-02-repo"
@@ -503,7 +541,8 @@ def participant_dashboard(principal: dict = Depends(require_participant)):
     for mission in public_missions(pack):
         mission_id = mission["id"]
         is_active = mission_id == event.get("active_mission_id")
-        missions.append({**mission, "completed": mission_id in completed, "active": is_active, "locked": not is_active and mission_id not in completed})
+        missions.append({**mission, "completed": mission_id in completed, "active": is_active, "closed":is_active and timing['closed'], "locked": not is_active and mission_id not in completed})
+    queue=queue_summary(rows)
     return {
         "event": {"event_id": event_id, "title": event.get("title"), "status": event.get("status"), "active_mission_id": event.get("active_mission_id"), "participation_mode": event.get("participation_mode", "team")},
         "team": {
@@ -512,24 +551,37 @@ def participant_dashboard(principal: dict = Depends(require_participant)):
             "github_repo_link_awarded": repository_link_awarded,
         },
         "missions": missions,
+        "mission_clock":timing,
+        "wallet":wallet(pack,rows,principal['team_id']),
+        "hints":catalog(pack,rows,principal['team_id']),
+        "github": connection_status(team, rows),
+        "evaluation_queue": {key:value for key,value in queue.items() if key!='positions'},
+        "evaluations": [public_evaluation(row,queue) for row in rows if row.get("type") == "evaluation" and row.get("team_id") == principal["team_id"]],
         "completed_missions": sorted(completed),
     }
 
 
 @app.post("/api/v1/participant/missions/{mission_id}/answer")
 def answer_mission(mission_id: str, body: AnswerRequest, principal: dict = Depends(require_participant)):
+    member=get_item(f"EVENT#{principal['event_id']}",'USER#'+principal['sub'])
+    if not member or member.get('team_id')!=principal['team_id']:raise HTTPException(403,'Tu registro ya no está disponible.')
     event = get_item(f"EVENT#{principal['event_id']}", "META")
     if not event or event.get("status") != "open":
         raise HTTPException(403, "The event is not active")
     if event.get("active_mission_id") != mission_id:
         raise HTTPException(409, "This mission is not currently active")
+    require_time(event)
     pack = load_pack(event.get("game_pack", "aws-event-driven"))
     mission = get_mission(pack, mission_id)
     if not mission or mission.get("type") != "quiz":
         raise HTTPException(404, "This mission does not accept quiz answers")
     if not hmac.compare_digest(body.answer.strip().lower(), str(mission.get("answer", "")).strip().lower()):
         return {"passed": False, "message": "Not quite. Review the mission material and try again."}
-    awarded = award_mission(principal["event_id"], principal["team_id"], mission, "quiz")
+    awarded = award_mission(principal["event_id"], principal["team_id"], mission, "quiz",participant_id=principal['sub'])
+    if not awarded:
+        latest=get_item(f"EVENT#{principal['event_id']}",'META') or event
+        require_time(latest)
+        if latest.get('status')!='open' or latest.get('active_mission_id')!=mission_id:raise HTTPException(409,'La misión cambió o el evento está pausado.')
     return {"passed": True, "already_completed": not awarded, "points": 0 if not awarded else int(mission.get("points", 0)), "message": "Checkpoint completed."}
 
 
@@ -587,6 +639,7 @@ def create_event(body: EventCreateRequest, _: dict = Depends(require_admin)):
         "team_size": 1 if body.participation_mode == "individual" else body.team_size,
         "max_participants": body.max_participants, "max_teams": max_teams,
         "participant_count": 0, "team_count": 0, "created_at": created,
+        "mission_deadline":int(time.time())+int(pack.get('missions',[{}])[0].get('duration_minutes',15))*60,
     }, ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)")
     table_resource().put_item(Item={
         "PK": f"EVENTCODE#{event_code}", "SK": "EVENT", "type": "event-code-lookup",
@@ -644,6 +697,7 @@ def participant_register_github_repo(
         raise HTTPException(403, "El evento no está aceptando cambios en este momento.")
     if event.get("active_mission_id") != "mission-02":
         raise HTTPException(409, "El instructor debe activar la misión 2 para conectar el repositorio y recibir el punto.")
+    require_time(event)
 
     table = table_resource()
     team_key = {"PK": f"EVENT#{event_id}", "SK": f"TEAM#{team_id}"}
@@ -708,6 +762,10 @@ def participant_register_github_repo(
                 }.items()},
                 "ConditionExpression": "attribute_not_exists(PK) AND attribute_not_exists(SK)",
             }},
+            {'ConditionCheck':{'TableName':settings.dynamodb_table_name,
+                'Key':{'PK':{'S':f'EVENT#{event_id}'},'SK':{'S':'META'}},
+                'ConditionExpression':'#s = :open AND active_mission_id = :mission AND '+deadline_condition(),
+                'ExpressionAttributeNames':{'#s':'status'},'ExpressionAttributeValues':{':open':{'S':'open'},':mission':{'S':'mission-02'},':clock_now':{'N':str(int(time.time()))}}}},
         ])
     except client.exceptions.TransactionCanceledException as exc:
         refreshed_team = table.get_item(Key=team_key, ConsistentRead=True).get("Item", {})
@@ -737,8 +795,11 @@ def admin_dashboard(_: dict = Depends(require_admin)):
     submissions = [x for x in rows if x.get("type") == "submission"]
     return {
         "event": {k: event.get(k) for k in ("event_id", "title", "status", "active_mission_id", "game_pack", "participation_mode", "team_size", "max_participants")},
+        "evaluation_queue": {key:value for key,value in queue_summary(rows).items() if key!='positions'},
         "participants": len(participants),
         "submissions": len(submissions),
+        "mission_clock":clock(event),
+        "missions":[{'id':m['id'],'title':m['title'],'duration_minutes':m.get('duration_minutes',15)} for m in load_pack(event.get('game_pack','aws-event-driven'))['missions']],
         "teams": [{"team_id": t["team_id"], "name": t["name"], "members": sum(1 for p in participants if p.get("team_id") == t["team_id"]), "score": int(t.get("score", 0)), "repo_url": t.get("repo_url", "")} for t in teams],
     }
 
@@ -747,11 +808,18 @@ def admin_dashboard(_: dict = Depends(require_admin)):
 def update_event_status(event_id: str, body: EventStatusRequest, _: dict = Depends(require_admin)):
     if body.status not in {"open", "paused", "finished"}:
         raise HTTPException(422, "Status must be open, paused, or finished")
+    previous=get_item(f'EVENT#{event_id}','META') or {}
+    timing=clock(previous)
+    extra='';extra_values={}
+    if body.status=='paused' and previous.get('status')!='paused' and timing['remaining_seconds'] is not None:
+        extra=', mission_remaining = :remaining';extra_values[':remaining']=timing['remaining_seconds']
+    elif body.status=='open' and previous.get('status')=='paused' and timing['remaining_seconds'] is not None:
+        extra=', mission_deadline = :deadline';extra_values[':deadline']=int(time.time())+timing['remaining_seconds']
     table_resource().update_item(
         Key={"PK": f"EVENT#{event_id}", "SK": "META"},
-        UpdateExpression="SET #status = :status, updated_at = :now",
+        UpdateExpression="SET #status = :status, updated_at = :now"+extra,
         ExpressionAttributeNames={"#status": "status"},
-        ExpressionAttributeValues={":status": body.status, ":now": now_iso()},
+        ExpressionAttributeValues={":status": body.status, ":now": now_iso(),**extra_values},
         ConditionExpression="attribute_exists(PK)",
     )
     return {"event_id": event_id, "status": body.status}
@@ -763,12 +831,13 @@ def activate_mission(event_id: str, body: ActivateMissionRequest, _: dict = Depe
     if not event:
         raise HTTPException(404, "Event not found")
     pack = load_pack(event.get("game_pack", "aws-event-driven"))
-    if not get_mission(pack, body.mission_id):
+    mission=get_mission(pack, body.mission_id)
+    if not mission:
         raise HTTPException(404, "Mission not found in Game Pack")
     table_resource().update_item(
         Key={"PK": f"EVENT#{event_id}", "SK": "META"},
-        UpdateExpression="SET active_mission_id = :mission, updated_at = :now",
-        ExpressionAttributeValues={":mission": body.mission_id, ":now": now_iso()},
+        UpdateExpression="SET active_mission_id = :mission, updated_at = :now, mission_deadline = :deadline, mission_remaining = :remaining",
+        ExpressionAttributeValues={":mission": body.mission_id, ":now": now_iso(),':deadline':int(time.time())+(body.duration_minutes or int(mission.get('duration_minutes',15)))*60,':remaining':(body.duration_minutes or int(mission.get('duration_minutes',15)))*60},
     )
     return {"event_id": event_id, "active_mission_id": body.mission_id}
 
@@ -801,6 +870,8 @@ async def github_webhook(request: Request, x_hub_signature_256: str | None = Hea
         raise HTTPException(401, "Invalid webhook signature")
     if x_github_event != "workflow_run":
         return {"accepted": True, "ignored": True}
+    if not settings.github_legacy_scoring_enabled:
+        return {"accepted": True, "ignored": True, "reason": "Participant workflow results cannot award points in this deployment"}
     payload = json.loads(raw)
     run = payload.get("workflow_run", {})
     if payload.get("action") != "completed" or run.get("conclusion") != "success":

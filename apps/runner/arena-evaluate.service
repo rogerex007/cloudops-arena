@@ -1,0 +1,15 @@
+[Unit]
+Description=CloudOps Arena disposable Terraform judge
+After=systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/judge/bin/python /opt/arena/guest.py
+TimeoutStartSec=240
+StandardOutput=journal+console
+StandardError=journal+console
+ExecStopPost=/usr/sbin/poweroff
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,45 @@
+# Combine with compose.yaml and compose.evaluator.yaml. No public Floci ports.
+services:
+  api:
+    environment:
+      PLAYGROUND_MANAGER_URL: http://playgrounds:9001
+    networks: [frontend, backend, runner-control]
+  runner:
+    environment:
+      VM_SLOTS_DIR: /slots
+    volumes:
+      - vm-slots:/slots
+  worker:
+    environment:
+      PLAYGROUND_MANAGER_URL: http://playgrounds:9001
+  playgrounds:
+    image: cloudops-arena-playground-pilot:local
+    build:
+      context: ../..
+      dockerfile: apps/playground/Dockerfile
+    entrypoint: [python3, /opt/arena/manager.py]
+    environment:
+      RUNNER_TOKEN_FILE: /run/secrets/runner_token
+      VM_SLOTS_DIR: /slots
+    secrets: [runner_token]
+    devices: [/dev/kvm:/dev/kvm]
+    volumes:
+      - playground-work:/work
+      - vm-slots:/slots
+    networks: [runner-control]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    mem_limit: 8g
+    cpus: 4
+    pids_limit: 256
+    stop_grace_period: 10m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9001/health',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+volumes:
+  vm-slots:
+  playground-work:

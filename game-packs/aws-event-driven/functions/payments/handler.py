@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.request
 
 import boto3
 from botocore.exceptions import ClientError
@@ -32,6 +33,13 @@ def handler(event, context):
                 Item={"eventId": {"S": event_id}, "service": {"S": "payments"}, "orderId": {"S": order_id}},
                 ConditionExpression="attribute_not_exists(eventId)",
             )
+            operations_url=os.getenv("OPERATIONS_URL")
+            if operations_url:
+                operation=urllib.request.Request(operations_url,
+                    data=json.dumps({"service":"payments","orderId":order_id}).encode(),
+                    headers={"Content-Type":"application/json"},method="POST")
+                with urllib.request.urlopen(operation,timeout=3) as response:
+                    if response.status!=201:raise RuntimeError("Simulated operation was not recorded")
             print(json.dumps({"level": "INFO", "message": "payment simulated", "orderId": order_id, "eventId": event_id}))
         except ClientError as exc:
             if exc.response["Error"]["Code"] == "ConditionalCheckFailedException":

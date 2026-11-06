@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+import re
 
 import yaml
 
@@ -17,10 +18,20 @@ def load_pack(pack_id: str = "aws-event-driven") -> dict:
     return data
 
 
+def archive_name(pack: dict, mission: dict) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", f"{pack['id']}-{pack['version']}-{mission['id']}-starter") + ".zip"
+
+
 def public_missions(pack: dict) -> list[dict]:
     result = []
     for mission in pack.get("missions", []):
-        item = {k: v for k, v in mission.items() if k not in {"answer", "validator_secret", "expected_value"}}
+        item = {k: v for k, v in mission.items() if k not in {"answer", "validator_secret", "expected_value", "hints"}}
+        if mission.get("materials"):
+            item["materials"] = {
+                "title": mission["materials"].get("title", "Materiales del laboratorio"),
+                "instructions": mission["materials"].get("instructions", []),
+                "filename": archive_name(pack, mission),
+            }
         result.append(item)
     return result
 

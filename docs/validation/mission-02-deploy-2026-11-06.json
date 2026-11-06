@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "real_vm_apply_and_persistence": true,
+  "negative_vm_rejected": true,
+  "verified_receipt_inventory": true,
+  "technical_points_once": 14,
+  "plan_only_points": 0,
+  "legacy_score_preserved": true,
+  "real_github_oidc_deploy_run": "pending participant workflow update",
+  "seconds": 105.0,
+  "tested_at_utc": "2026-11-06T03:03:13.342833+00:00",
+  "source": "trusted repository fixtures; synthetic event and memberships; real KVM/Floci/Terraform"
+}

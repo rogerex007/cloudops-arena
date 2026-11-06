@@ -1,0 +1,41 @@
+# Use together with compose.yaml on a Linux x86_64 KVM host.
+services:
+  worker:
+    environment:
+      EVALUATION_RUNNER_URL: http://runner:9000
+      EVALUATION_CONCURRENCY: ${EVALUATION_CONCURRENCY:-2}
+    networks: [backend, worker-egress, runner-control]
+    depends_on:
+      runner:
+        condition: service_healthy
+  runner:
+    image: cloudops-arena-kvm-runner:local
+    build:
+      context: ../..
+      dockerfile: apps/runner/Dockerfile
+    environment:
+      RUNNER_CONCURRENCY: ${EVALUATION_CONCURRENCY:-2}
+      RUNNER_TOKEN_FILE: /run/secrets/runner_token
+    devices:
+      - /dev/kvm:/dev/kvm
+    secrets: [runner_token]
+    volumes:
+      - runner-work:/work
+    networks: [runner-control]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    mem_limit: 6g
+    cpus: 4
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+networks:
+  runner-control:
+    internal: true
+volumes:
+  runner-work:

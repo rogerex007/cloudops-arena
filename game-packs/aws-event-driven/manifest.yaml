@@ -38,6 +38,16 @@ missions:
         - "AWS CloudTrail"
     answer: "Amazon EventBridge"
   - id: mission-02
+    coin_reward: 10
+    hints:
+      - id: hint-1
+        title: "Orden del pipeline"
+        cost: 3
+        content: "El paso de validación comprueba el plan. Agrega después el paso de deploy con ARENA_OPERATION: deploy; conserva el cliente OIDC que escribe el primer paso."
+      - id: hint-2
+        title: "Si el deploy no aparece"
+        cost: 6
+        content: "Comprueba que .github/workflows/terraform-lab.yml esté en la rama predeterminada, ARENA_EVENT_ID coincida con Arena y la App tenga acceso al repositorio. Un plan verde no crea recursos."
     title: "Provisiona la infraestructura"
     type: lab
     category: iac
@@ -46,7 +56,63 @@ missions:
     workflow_points: 14
     repository_link_points: 1
     workflow: ".github/workflows/terraform-lab.yml"
-    description: "Vincula el repositorio de GitHub de tu equipo, revisa los recursos del laboratorio y valida el plan de infraestructura con Terraform y Floci."
+    materials:
+      title: "Kit inicial de la misión 02"
+      revision: 3
+      instructions:
+        - "Descarga y descomprime el kit. Abre README.md para ver la guía completa."
+        - "Sube su contenido a tu repositorio: .github y game-packs deben quedar en la raíz. Activa mostrar archivos ocultos para ver .github."
+        - "En GitHub usa Add file → Upload files; no subas el ZIP ni una carpeta contenedora adicional."
+        - "Si ya vinculaste un repositorio, úsalo y revisa tus cambios antes de reemplazar archivos."
+        - "Autoriza tu repositorio con la GitHub App. Crea ARENA_EVENT_ID en las variables de Actions con el identificador que muestra Arena."
+        - "Ejecuta Actions → Validar y desplegar laboratorio en Arena → Run workflow en la rama predeterminada. Los siguientes cambios del laboratorio disparan la revisión automáticamente."
+      files:
+        - source: starter/README.md
+          destination: README.md
+        - source: starter/LICENSE
+          destination: LICENSE
+        - source: starter/.gitignore
+          destination: .gitignore
+        - source: starter/terraform-lab.yml
+          destination: .github/workflows/terraform-lab.yml
+        - source: terraform/main.tf
+          destination: game-packs/aws-event-driven/terraform/main.tf
+        - source: terraform/variables.tf
+          destination: game-packs/aws-event-driven/terraform/variables.tf
+        - source: terraform/versions.tf
+          destination: game-packs/aws-event-driven/terraform/versions.tf
+        - source: terraform/outputs.tf
+          destination: game-packs/aws-event-driven/terraform/outputs.tf
+        - source: terraform/terraform.tfvars.example
+          destination: game-packs/aws-event-driven/terraform/terraform.tfvars.example
+        - source: terraform/.build/.gitkeep
+          destination: game-packs/aws-event-driven/terraform/.build/.gitkeep
+        - source: starter/orders.py
+          destination: game-packs/aws-event-driven/functions/orders/handler.py
+        - source: starter/payments.py
+          destination: game-packs/aws-event-driven/functions/payments/handler.py
+        - source: starter/inventory.py
+          destination: game-packs/aws-event-driven/functions/inventory/handler.py
+    evaluation:
+      validator: aws-event-driven-plan-v1
+      deployment_validator: aws-event-driven-deploy-v1
+      source_files:
+        - game-packs/aws-event-driven/terraform/main.tf
+        - game-packs/aws-event-driven/terraform/variables.tf
+        - game-packs/aws-event-driven/terraform/versions.tf
+        - game-packs/aws-event-driven/terraform/outputs.tf
+        - game-packs/aws-event-driven/functions/orders/handler.py
+        - game-packs/aws-event-driven/functions/payments/handler.py
+        - game-packs/aws-event-driven/functions/inventory/handler.py
+      required_files:
+        - .github/workflows/terraform-lab.yml
+        - game-packs/aws-event-driven/terraform/main.tf
+        - game-packs/aws-event-driven/terraform/variables.tf
+        - game-packs/aws-event-driven/terraform/versions.tf
+        - game-packs/aws-event-driven/functions/orders/handler.py
+        - game-packs/aws-event-driven/functions/payments/handler.py
+        - game-packs/aws-event-driven/functions/inventory/handler.py
+    description: "Vincula tu repositorio, valida Terraform y agrega el paso de deploy para crear tu infraestructura privada en Floci."
     resources:
       - name: "Amazon API Gateway HTTP API"
         purpose: "Expone el endpoint HTTP para crear órdenes."
@@ -61,43 +127,124 @@ missions:
       - name: "IAM"
         purpose: "Otorga a las funciones los permisos necesarios para su trabajo."
     instructions:
-      - "Usa el repositorio de GitHub que el instructor preparó para tu equipo; debe contener game-packs/aws-event-driven/terraform y .github/workflows/terraform-lab.yml, y el runner asignado debe tener acceso al repositorio."
+      - "Descarga el kit de esta misión y sigue su README para subir los archivos a un repositorio de tu cuenta en GitHub. No necesitas instalar herramientas locales para preparar la entrega."
       - "En el formulario de esta misión, pega la URL HTTPS del repositorio. Arena la vincula al equipo y, al confirmarlo, el equipo recibe 1 punto. Esto no concede permisos en GitHub."
       - "Revisa los recursos listados y sigue el flujo Orden HTTP → Lambda Orders → EventBridge → SQS de pagos e inventario → Lambdas consumidoras."
-      - "Abre el directorio game-packs/aws-event-driven/terraform en el runner de laboratorio asignado por el instructor."
-      - "Ejecuta terraform fmt -recursive, terraform init, terraform validate y terraform plan con el prefijo único del equipo."
-      - "En GitHub, abre Actions → Terraform Lab Provisioning → Run workflow; selecciona la rama predeterminada del repositorio."
-      - "Introduce el prefijo único que te asignó el instructor y deja apply desactivado. El workflow ejecuta fmt, init, validate y plan."
-      - "Revisa el plan. Solo el instructor puede autorizar apply después de revisarlo."
-      - "Un workflow exitoso en la rama predeterminada otorga los 14 puntos restantes."
+      - "Confirma que .github y game-packs están en la raíz del repositorio. Las funciones iniciales quedan pendientes para las misiones 03 y 04."
+      - "Autoriza el repositorio con la GitHub App y configura ARENA_EVENT_ID en las variables de GitHub Actions."
+      - "Ejecuta Actions → Validar y desplegar laboratorio en Arena → Run workflow. Agrega el paso de deploy del README. El evaluador revisará el plan, aplicará tu commit en Floci y concederá los 14 puntos restantes tras verificar el despliegue."
       - "No cambies los endpoints de Floci, no uses credenciales reales de AWS y no ejecutes terraform apply fuera del runner aislado autorizado por el instructor."
   - id: mission-03
+    coin_reward: 10
+    hints:
+      - id: hint-1
+        title: "Contrato de Orders"
+        cost: 3
+        content: "Orders recibe un evento HTTP. Decodifica el body, guarda la orden y publica un evento OrderCreated; los consumidores reciben Records de SQS, no el mismo formato HTTP."
+      - id: hint-2
+        title: "Seguir una orden"
+        cost: 6
+        content: "Usa un orderId estable para relacionar DynamoDB y el detail de EventBridge. Comprueba FailedEntryCount al publicar y conserva el identificador hasta los consumidores."
     title: "Publica y procesa una orden"
     type: lab
     category: serverless
     duration_minutes: 40
     points: 20
     workflow: ".github/workflows/app-integration-tests.yml"
+    evaluation:
+      validator: aws-event-driven-runtime-v1
+      source_files:
+        - game-packs/aws-event-driven/functions/orders/handler.py
+        - game-packs/aws-event-driven/functions/payments/handler.py
+        - game-packs/aws-event-driven/functions/inventory/handler.py
+      required_files:
+        - .github/workflows/app-integration-tests.yml
+        - game-packs/aws-event-driven/functions/orders/handler.py
+        - game-packs/aws-event-driven/functions/payments/handler.py
+        - game-packs/aws-event-driven/functions/inventory/handler.py
+    materials:
+      title: "Guía y workflow de la misión 03"
+      revision: 1
+      instructions:
+        - "Descarga la guía y el workflow. Conserva los handlers de tu repositorio y completa Orders, Payments e Inventory."
+        - "Agrega .github/workflows/app-integration-tests.yml a tu repositorio; usa el mismo ARENA_EVENT_ID."
+        - "Con la misión 03 activa, ejecuta Actions → Evaluar misión 03 en Arena → Run workflow."
+        - "Para reintentar el mismo commit fallido, activa retry en Run workflow."
+      files:
+        - source: starter/mission-03.md
+          destination: MISSION-03.md
+        - source: starter/app-integration-tests.yml
+          destination: .github/workflows/app-integration-tests.yml
     description: "Implementa el flujo de creación de órdenes y procesamiento asíncrono."
     instructions:
       - "La función Orders debe guardar la orden en DynamoDB."
       - "Debe publicar OrderCreated en EventBridge."
       - "EventBridge debe enrutar el evento a las colas de pagos e inventario."
       - "Las funciones consumidoras deben procesar los mensajes recibidos desde SQS."
+      - "Descarga la guía de esta misión para consultar los contratos de entrada, variables de entorno y evidencias esperadas."
+      - "El juez prepara recursos efímeros en Floci e invoca tus handlers como procesos sin privilegios dentro de la VM; no despliega el servicio Lambda."
+      - "Entrega únicamente desde Actions → Evaluar misión 03 en Arena. Una aprobación concede 20 puntos una sola vez."
   - id: mission-04
+    coin_reward: 10
+    hints:
+      - id: hint-1
+        title: "Un evento repetido"
+        cost: 3
+        content: "Antes de registrar una operación, intenta aceptar su identificador con una escritura condicional en la tabla de idempotencia. Un duplicado válido debe terminar sin repetir el efecto."
+      - id: hint-2
+        title: "Fallo parcial y recuperación"
+        cost: 6
+        content: "batchItemFailures debe contener únicamente los messageId fallidos. Cuando FAIL_PAYMENTS esté activo, falla antes de registrar la operación. Las operaciones aceptadas se notifican por OPERATIONS_URL."
     title: "Resiliencia: duplicados y mensajes fallidos"
     type: incident
     category: resilience
     duration_minutes: 45
     points: 30
     workflow: ".github/workflows/lab-integration-tests.yml"
+    evaluation:
+      validator: aws-event-driven-resilience-v1
+      source_files:
+        - game-packs/aws-event-driven/functions/orders/handler.py
+        - game-packs/aws-event-driven/functions/payments/handler.py
+        - game-packs/aws-event-driven/functions/inventory/handler.py
+      required_files:
+        - .github/workflows/lab-integration-tests.yml
+        - game-packs/aws-event-driven/functions/orders/handler.py
+        - game-packs/aws-event-driven/functions/payments/handler.py
+        - game-packs/aws-event-driven/functions/inventory/handler.py
+    materials:
+      title: "Guía y workflow de la misión 04"
+      revision: 1
+      instructions:
+        - "Añade el workflow de misión 04 y consulta MISSION-04.md; conserva las soluciones de misión 03."
+        - "Registra cada operación de negocio simulada mediante OPERATIONS_URL, solo después de aceptar la orden como nueva."
+        - "Los duplicados deben ser éxitos sin repetir operaciones. Payments debe fallar antes de registrar nada cuando FAIL_PAYMENTS=true."
+        - "Usa Actions → Evaluar misión 04 en Arena → Run workflow con el mismo ARENA_EVENT_ID y la misión 04 activa."
+      files:
+        - source: starter/mission-04.md
+          destination: MISSION-04.md
+        - source: starter/lab-integration-tests.yml
+          destination: .github/workflows/lab-integration-tests.yml
     description: "Demuestra idempotencia y recuperación frente a fallos controlados."
     instructions:
       - "Entrega dos veces el mismo evento OrderCreated."
       - "Demuestra que el pago simulado no se registra dos veces."
       - "Activa el fallo controlado del consumidor de pagos."
       - "Verifica el comportamiento de reintentos y la Dead Letter Queue."
+      - "Reporta solo los messageId fallidos en batchItemFailures; no repitas las operaciones de mensajes válidos."
+      - "Tras desactivar el fallo, el mensaje recuperado debe procesarse una sola vez. El juez prepara y controla los recursos dentro de la VM."
+      - "El workflow OIDC solicita la evaluación oficial; una aprobación concede 30 puntos una sola vez."
   - id: mission-05
+    coin_reward: 10
+    hints:
+      - id: hint-1
+        title: "Identidad temporal"
+        cost: 3
+        content: "OIDC permite al workflow demostrar su identidad sin guardar claves AWS permanentes. El resultado del workflow por sí solo no constituye evidencia técnica de la misión."
+      - id: hint-2
+        title: "Orden de validaciones"
+        cost: 6
+        content: "Separa formato, inicialización, validación, política del plan y despliegue. Una validación fallida debe impedir aplicar cambios."
     title: "Automatiza la entrega"
     type: pipeline
     category: devops
@@ -111,6 +258,16 @@ missions:
       - "No almacenes access keys de AWS en GitHub Secrets."
       - "Explica cómo OIDC permite obtener credenciales temporales en un entorno AWS real."
   - id: mission-06
+    coin_reward: 10
+    hints:
+      - id: hint-1
+        title: "Una hipótesis comprobable"
+        cost: 3
+        content: "Describe el síntoma, propone una causa concreta y define una prueba que pueda refutarla. No confundas una explicación convincente con evidencia."
+      - id: hint-2
+        title: "Reduce el contexto"
+        cost: 6
+        content: "Comparte solo un log anonimizado y el fragmento mínimo que reproduce el fallo; elimina tokens, correos, identificadores privados y credenciales."
     title: "Bonus: IA para ingeniería cloud"
     type: bonus
     category: ai

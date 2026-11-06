@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "labs": [
+    {
+      "lab": "pilot-a",
+      "deployed": true,
+      "managed_lambda_flow": true,
+      "persistent_resume": true,
+      "elapsed_seconds": 115.1
+    },
+    {
+      "lab": "pilot-b",
+      "deployed": true,
+      "managed_lambda_flow": true,
+      "persistent_resume": true,
+      "elapsed_seconds": 114.2
+    }
+  ],
+  "public_ports": [],
+  "host_docker_socket": false,
+  "container_memory_peak_bytes": 6706163712
+}

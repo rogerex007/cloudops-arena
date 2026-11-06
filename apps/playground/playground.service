@@ -1,0 +1,15 @@
+[Unit]
+Description=Arena persistent playground pilot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/bin/sh /opt/arena/start-playground.sh
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStopSec=40
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
