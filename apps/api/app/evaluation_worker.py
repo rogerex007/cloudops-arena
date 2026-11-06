@@ -199,7 +199,7 @@ def finish(item, result, *, expired=False, score=True):
             submission={'PK':pk,'SK':f"SUB#{item['team_id']}#{item['mission_id']}", 'type':'submission',
                 'team_id':item['team_id'],'mission_id':item['mission_id'],'status':'passed','points':points,
                 'source':'isolated-runner','run_id':result['run_id'],'commit_sha':item['commit_sha'],
-                'validator':result['validator'],'created_at':finished}
+                'validator':result['validator'],'created_at':finished,'answered_at':item.get('created_at',finished)}
             operations.extend([
                 {'Put':{'TableName':settings.dynamodb_table_name,'Item':{k:TypeSerializer().serialize(v) for k,v in submission.items()},'ConditionExpression':'attribute_not_exists(PK)'}},
                 {'Update':{'TableName':settings.dynamodb_table_name,

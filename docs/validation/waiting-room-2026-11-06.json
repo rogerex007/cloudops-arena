@@ -1,0 +1,12 @@
+{
+  "registration_before_start": true,
+  "no_automatic_first_mission": true,
+  "instructor_starts_first_mission": true,
+  "full_first_duration": true,
+  "participant_dashboard_verified": true,
+  "api_tests_passed": 242,
+  "web_tests_passed": 10,
+  "production_build": "passed",
+  "temporary_event_removed": true,
+  "existing_events_reset": false
+}

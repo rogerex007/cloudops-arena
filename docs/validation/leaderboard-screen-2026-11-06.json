@@ -1,0 +1,40 @@
+{
+  "api_tests_passed": 230,
+  "web_tests_passed": 9,
+  "typescript": "passed",
+  "production_build": "passed",
+  "mission_content_unchanged": true,
+  "missions": 4,
+  "theme": "previous dark Arena palette and mission cards",
+  "architecture": {
+    "interactive": true,
+    "matches_shared_idempotency_table": true,
+    "diagram_is_not_deployment_inventory": true
+  },
+  "scoreboard": {
+    "route": "/clasificacion/<share-token>",
+    "poll_seconds": 3,
+    "admin_publish_and_revoke": true,
+    "public_fields_allowlisted": true,
+    "tie_ranks_tested": true,
+    "automatic_reordering_without_reload": true
+  },
+  "browser": {
+    "desktop": [
+      1440,
+      1000
+    ],
+    "mobile": [
+      390,
+      844
+    ],
+    "page_horizontal_overflow": false,
+    "fixture": "temporary synthetic event only"
+  },
+  "cloudflare": {
+    "screen_html": 200,
+    "public_api": 200,
+    "no_store": true,
+    "html_no_referrer": true
+  }
+}

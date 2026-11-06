@@ -1,0 +1,13 @@
+{
+  "background_transition_without_browser": true,
+  "next_mission_full_duration": true,
+  "paused_event_preserved": true,
+  "last_mission_closed_without_finishing_event": true,
+  "api_tests_passed": 239,
+  "web_tests_passed": 9,
+  "typescript": "passed",
+  "production_build": "passed",
+  "temporary_event_removed": true,
+  "participant_scores_modified_by_test": false,
+  "server_tick_seconds": 2
+}

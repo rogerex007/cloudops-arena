@@ -13,6 +13,8 @@ router=APIRouter()
 def wallet(pack,rows,team):
     done={row.get('mission_id') for row in rows if row.get('type')=='submission' and row.get('team_id')==team and row.get('status')=='passed' and row.get('source')!='demo'}
     earned=sum(int(mission.get('coin_reward',10)) for mission in pack.get('missions',[]) if mission['id'] in done)
+    present={mission['id'] for mission in pack.get('missions',[])}
+    earned+=sum(int(reward) for mission,reward in pack.get('legacy_coin_rewards',{}).items() if mission in done and mission not in present)
     spent=int(next((row.get('spent',0) for row in rows if row.get('SK')=='WALLET#'+team),0))
     return {'earned':earned,'spent':spent,'balance':max(0,earned-spent)}
 

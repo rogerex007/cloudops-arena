@@ -1,0 +1,24 @@
+{
+  "api_tests_passed": 247,
+  "web_tests_passed": 10,
+  "typescript": "passed",
+  "production_build": "passed",
+  "ranking": "score_desc_then_latest_positive_approved_answer_asc",
+  "shared_views": [
+    "participant",
+    "instructor",
+    "public_screen"
+  ],
+  "technical_queue_time_excluded_for_new_receipts": true,
+  "historical_fallback": "award_receipt_created_at",
+  "existing_points_modified": false,
+  "regressions": [
+    "equal_scores",
+    "higher_score_priority",
+    "no_points_retries",
+    "failed_attempts",
+    "unknown_history",
+    "stable_zero_score_order",
+    "public_and_participant_consistency"
+  ]
+}

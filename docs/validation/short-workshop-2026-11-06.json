@@ -1,0 +1,45 @@
+{
+  "program": "aws-event-driven-60",
+  "version": "1.0.0",
+  "missions": 4,
+  "mission_minutes": [
+    5,
+    15,
+    20,
+    15
+  ],
+  "closing_minutes": 5,
+  "points": 75,
+  "api_tests_passed": 221,
+  "web_tests_passed": 8,
+  "typescript": "passed",
+  "vite_production_build": "passed",
+  "real_vm": {
+    "orders_complete_prepared_consumers_runtime": "passed",
+    "prepared_consumers_resilience": "rejected_as_expected",
+    "participant_scores_modified": false
+  },
+  "migration": {
+    "open_events_migrated": 2,
+    "progress_fingerprints_unchanged": true,
+    "finished_history_unchanged": true,
+    "existing_member_http_dashboard_missions": 4
+  },
+  "firefox": {
+    "desktop": [
+      1440,
+      1000
+    ],
+    "mobile": [
+      390,
+      844
+    ],
+    "horizontal_overflow": false,
+    "mission_navigation_count": 4,
+    "empty_inventory_checked": true
+  },
+  "limitations": [
+    "Mission03/04 evaluate ephemeral handler fixtures rather than updating persistent deployed Lambdas",
+    "Two concurrent VMs; this is not a full fifty-participant workshop simulation"
+  ]
+}

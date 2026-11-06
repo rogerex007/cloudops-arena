@@ -14,8 +14,7 @@ export default function HintShop({token,mission,hints,balance,closed,onChanged}:
   }
   if(!hints.length)return null;
   return <section className="hint-shop">
-    <div className="section-heading"><div><div className="eyebrow">UNA AYUDA, NO LA RESPUESTA</div><h3><Lightbulb size={20}/> Centro de pistas</h3></div><span className="coin-badge"><Coins size={17}/>{balance} monedas</span></div>
-    <p>Gana 10 monedas al completar cada misión. Comprar pistas no reduce tus puntos. En equipo, el saldo y las pistas se comparten.</p>
+    <p>Una compra por pista. El costo se descuenta de tus monedas y la pista queda disponible para tu equipo.</p>
     <div className="hint-grid">{hints.map(original=>{
       const hint=unlocked[original.id]||original;
       return <article className={`hint-card ${hint.purchased?'unlocked':''}`} key={hint.id}>

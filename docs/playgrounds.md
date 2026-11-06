@@ -26,11 +26,11 @@ de referencia. `POST` comprueba pertenencia/estado y rechaza aprovisionamiento c
 409. Los discos de referencia existentes no se borran mediante esta corrección;
 conservan su expiración normal y quedan fuera de la vista del participante.
 
-La misión 02 actual evalúa un **plan**, no ejecuta apply persistente. Para habilitar
-el inventario del alumno falta enlazar commit autorizado, apply verificado y VM
-asignada, y actualizar la captura solo después de ese despliegue. Las pruebas del
-piloto no sustituyen esa procedencia. El pack de una hora sigue como borrador y
-las misiones/puntos actuales se conservan.
+La misión 02 permite revisar un plan o desplegar desde Actions. Solo el despliegue
+verificado publica inventario y puede conceder puntos. El programa de una hora
+ya está publicado con cuatro misiones; véase [programa y límites](short-workshop.md).
+Las misiones 03/04 todavía evalúan handlers en recursos temporales, sin actualizar
+las Lambdas de este despliegue persistente.
 
 ## Gestor privado de referencia
 

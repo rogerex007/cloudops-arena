@@ -31,4 +31,5 @@ receipt and points. Reference snapshots remain hidden. Real positive/negative
 KVM, receipt/score and plan-only tests passed; the deploy flow through real GitHub
 OIDC awaits the participant's updated workflow. Missions 03/04 still grade in
 ephemeral fixtures, not these persistent resources. Previous-generation cleanup,
-prewarming, 50-session load and the one-hour pack remain pending.
+prewarming and full workshop load remain pending. The one-hour pack is published
+with four missions and the existing runtime graders; see [short workshop](short-workshop.md).

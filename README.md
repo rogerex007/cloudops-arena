@@ -6,6 +6,25 @@ CloudOps Arena is a Game Pack-driven platform. The platform owns the event lifec
 
 > **Current release: 0.1.1 — runnable MVP / foundation.** It includes a local participant portal, instructor console, DynamoDB-backed API, Game Pack manifest, quiz scoring, signed GitHub `workflow_run` webhook handling, a Floci local environment and a Terraform example for the first AWS Event-Driven Game Pack. It is not yet a production-ready public SaaS or a fully unattended 100-person lab orchestrator. See [Known limitations](docs/known-limitations.md).
 
+## Taller de una hora
+
+Los eventos nuevos reciben participantes sin iniciar el reloj. El instructor
+pulsa **Iniciar misión 1** cuando todos están listos.
+
+Las misiones con reloj avanzan automáticamente al vencer; las pausas del instructor
+detienen la secuencia. La última se cierra sin finalizar el evento.
+
+El programa predeterminado es `aws-event-driven-60`: cuatro misiones de 5, 15,
+20 y 15 minutos, más 5 minutos de cierre. Conserva los IDs y los 75 puntos de
+las primeras cuatro misiones del programa anterior. El pack original de seis
+permanece para el historial. El espacio del participante separa Misión,
+Arquitectura, Infraestructura, Actividad y Clasificación; las pistas y ayudas se despliegan
+cuando se necesitan. Consulta [programa y migración](docs/short-workshop.md).
+
+En instructor, **Clasificación → Abrir marcador** abre una pantalla independiente
+`/clasificacion/<identificador>` que actualiza los puntos cada 3 segundos.
+Consulta [marcador y arquitectura](docs/leaderboard-screen.md).
+
 ## Product principles
 
 La experiencia del taller incorpora reloj autoritativo por misión, monedas por

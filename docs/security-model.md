@@ -179,3 +179,14 @@ login sigue comprobando credenciales. El gateway debe proteger tanto el panel
 como `/api/v1/admin*` y `/api/v1/auth/admin*`, mientras registro/participantes y
 Actions quedan fuera del login interactivo. La política de Actions exige OIDC
 en el backend. Véase [configuración y comprobación](instructor-access.md).
+
+## Public projection links
+
+An instructor can explicitly publish and revoke a per-event scoreboard link.
+The random 192-bit link grants only read access to display names, ranks, scores
+and event/mission summaries; it grants no participant or admin session. Every
+read checks the event's current token against the separate SCREEN index, so an
+orphaned old index cannot bypass revocation. Public responses use an explicit
+field allowlist and no-store; HTML also sends no-referrer/noindex. This is a
+shareable projection, so anyone receiving its link can see the display names.
+See [operation](leaderboard-screen.md).

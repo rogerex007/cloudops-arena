@@ -9,15 +9,17 @@ import type { Evaluation, Mission, Participant, ParticipantAuthResult, PublicEve
 import './mission-lab.css';
 import {isInstructorPath, loadSession, saveSession, clearSession} from './session';
 import Playground from './Playground';
+import ArchitectureDiagram,{type Architecture} from './ArchitectureDiagram';
 import MissionTimer,{type MissionClock} from './MissionTimer';
 import HintShop,{type Hint} from './HintShop';
 
 type View = 'home' | 'participant' | 'admin';
 type Dashboard = {
-  event: { event_id: string; title: string; status: string; active_mission_id: string; participation_mode: 'individual' | 'team' };
+  event: { event_id: string; title: string; status: string; active_mission_id: string; missions_started?:boolean; participation_mode: 'individual' | 'team' };
   team: { team_id: string; name: string; score: number; github_repo_name: string; github_repo_url: string; github_repo_link_awarded: boolean };
   missions: Mission[];
   evaluations: Evaluation[];
+  program?:{id:string;duration_minutes:number;architecture?:Architecture};
   mission_clock?:MissionClock;
   wallet?:{balance:number;earned:number;spent:number};
   hints?:Record<string,Hint[]>;
@@ -26,7 +28,7 @@ type Dashboard = {
 };
 type LeaderboardRow = { rank: number; team_id: string; name: string; score: number; is_mine: boolean };
 type AdminDashboard = {
-  event: { event_id: string; title: string; status: string; active_mission_id: string; game_pack: string; participation_mode: 'individual' | 'team'; team_size: number; max_participants: number } | null;
+  event: { event_id: string; title: string; status: string; active_mission_id: string; missions_started?:boolean; game_pack: string; participation_mode: 'individual' | 'team'; team_size: number; max_participants: number } | null;
   participants: number; submissions: number;
   mission_clock?:MissionClock;
   missions?:{id:string;title:string;duration_minutes:number}[];
@@ -63,12 +65,15 @@ export default function App() {
     const value = sessionStorage.getItem('arena-team-invite'); return value ? JSON.parse(value) : null;
   });
   const [adminForm, setAdminForm] = useState({ username: 'admin', password: '' });
+  const [newEventPack,setNewEventPack]=useState('aws-event-driven-60');
+  const [gamePacks,setGamePacks]=useState<{id:string;title:string;duration_minutes:number;missions:number}[]>([]);
   const [newEventTitle, setNewEventTitle] = useState('Todo empieza con un evento');
   const [newEventMode, setNewEventMode] = useState<'individual' | 'team'>('individual');
   const [newEventTeamSize, setNewEventTeamSize] = useState(5);
   const [newEventMaxParticipants, setNewEventMaxParticipants] = useState(50);
   const [missionDuration,setMissionDuration]=useState<number|''>('');
   const [clockExpired,setClockExpired]=useState(false);
+  const [workspaceTab,setWorkspaceTab]=useState<'mission'|'infrastructure'|'activity'|'ranking'|'architecture'>('mission');
   const [createdEvent, setCreatedEvent] = useState<{event_code:string;participation_mode:'individual'|'team';team_size:number;max_participants:number}|null>(null);
 
   const signedIn = Boolean(token && role);
@@ -76,6 +81,20 @@ export default function App() {
   const missionClosed=clockExpired||Boolean(dashboard?.mission_clock?.closed);
   useEffect(()=>setClockExpired(Boolean(dashboard?.mission_clock?.closed)),[dashboard?.event.active_mission_id,dashboard?.mission_clock?.deadline,dashboard?.mission_clock?.paused]);
   useEffect(()=>{if(dashboard)setSelectedMission(current=>dashboard.missions.find(m=>m.id===current?.id)||dashboard.missions.find(m=>m.active)||null);},[dashboard]);
+  useEffect(()=>{
+    if(!dashboard)return;
+    setSelectedMission(dashboard.missions.find(m=>m.active)||null);
+    setAnswer('');setWorkspaceTab('mission');
+  },[dashboard?.event.active_mission_id]);
+  useEffect(()=>{
+    if(role!=='admin'||!token||view!=='admin')return;
+    let loading=false;
+    const timer=window.setInterval(async()=>{
+      if(loading||document.hidden)return;loading=true;
+      try{await refreshAdmin();}catch(e){setError((e as Error).message);}finally{loading=false;}
+    },5000);
+    return()=>window.clearInterval(timer);
+  },[token,role,view]);
   const pendingEvaluation = dashboard?.evaluations?.find(evaluation => ['pending', 'preparing', 'running'].includes(evaluation.status));
   const missionEvaluation = dashboard?.evaluations?.filter(evaluation => evaluation.mission_id === selectedMission?.id)
     .sort((a,b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at))[0];
@@ -132,7 +151,8 @@ export default function App() {
   }
   async function refreshAdmin() {
     if (!token) return;
-    setAdminData(await request<AdminDashboard>('/api/v1/admin/dashboard', token));
+    const [data,packs]=await Promise.all([request<AdminDashboard>('/api/v1/admin/dashboard',token),request<{game_packs:typeof gamePacks}>('/api/v1/admin/game-packs',token)]);
+    setAdminData(data);setGamePacks(packs.game_packs);
   }
   useEffect(() => {
     if (!signedIn) return;
@@ -262,19 +282,50 @@ export default function App() {
   async function createEvent(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError(''); setCreatedEvent(null);
     try {
-      const result = await request<{event_id:string;event_code:string;participation_mode:'individual'|'team';team_size:number;max_participants:number}>('/api/v1/admin/events', token, {method:'POST',body:JSON.stringify({title:newEventTitle,game_pack:'aws-event-driven',participation_mode:newEventMode,team_size:newEventTeamSize,max_participants:newEventMaxParticipants})});
+      const result = await request<{event_id:string;event_code:string;participation_mode:'individual'|'team';team_size:number;max_participants:number}>('/api/v1/admin/events', token, {method:'POST',body:JSON.stringify({title:newEventTitle,game_pack:newEventPack,participation_mode:newEventMode,team_size:newEventTeamSize,max_participants:newEventMaxParticipants})});
       setCreatedEvent({event_code:result.event_code,participation_mode:result.participation_mode,team_size:result.team_size,max_participants:result.max_participants});
       await refreshAdmin(); setNotice('Evento creado. Ya puedes compartir el código del evento.');
     } catch(e) { setError((e as Error).message); } finally { setBusy(false); }
   }
+  async function changeProgram() {
+    if(!adminData?.event)return;
+    const event=adminData.event;const wasOpen=event.status==='open';setBusy(true);setError('');
+    try {
+      if(wasOpen)await request(`/api/v1/admin/events/${event.event_id}/status`,token,{method:'PATCH',body:JSON.stringify({status:'paused'})});
+      await request(`/api/v1/admin/events/${event.event_id}/game-pack`,token,{method:'POST',body:JSON.stringify({game_pack:newEventPack})});
+      setNotice('Programa actualizado. Se conservaron participantes, aprobaciones y puntos.');
+    } catch(e){setError((e as Error).message);}
+    finally {
+      if(wasOpen){try{await request(`/api/v1/admin/events/${event.event_id}/status`,token,{method:'PATCH',body:JSON.stringify({status:'open'})});}catch(e){setError((e as Error).message);}}
+      await refreshAdmin();setBusy(false);
+    }
+  }
 
-  return <div className="app-shell">
+  async function openLeaderboardScreen(){
+    if(!adminData?.event)return;
+    setBusy(true);
+    // Open within the click gesture so browsers do not block the projection tab.
+    const tab=window.open('about:blank','_blank');
+    if(tab)tab.opener=null;
+    try{
+      const shared=await request<{path:string}>(`/api/v1/admin/events/${adminData.event.event_id}/leaderboard-screen`,token,{method:'POST'});
+      if(tab)tab.location.href=shared.path;
+      else setNotice('Marcador: '+new URL(shared.path,window.location.origin).href);
+    }catch(e){tab?.close();setError((e as Error).message);}finally{setBusy(false);}
+  }
+  async function revokeLeaderboardScreen(){
+    if(!adminData?.event)return;
+    try{await request(`/api/v1/admin/events/${adminData.event.event_id}/leaderboard-screen`,token,{method:'DELETE'});setNotice('Enlace del marcador desactivado. Abrir marcador generará otro.');}
+    catch(e){setError((e as Error).message);}
+  }
+
+  return <div className={`app-shell ${view==='participant'&&role==='participant'?'is-participant':''}`}>
     <header className="topbar">
       <button className="brand" onClick={() => setView(instructorRoute ? 'admin' : signedIn ? 'participant' : 'home')}>
         <span className="brand-mark"><Cloud size={21}/></span><span>CloudOps <b>Arena</b></span>
       </button>
       <div className="top-actions">
-        <span className="env-pill"><span className="pulse"/> CLOUDOPS ARENA</span>
+        {!signedIn&&<span className="env-pill">Laboratorios</span>}
         {signedIn && <button className="icon-button" title="Cerrar sesión" onClick={logout}><LogOut size={17}/></button>}
       </div>
     </header>
@@ -320,44 +371,41 @@ export default function App() {
       </section>}
 
       {!instructorRoute && view === 'participant' && role === 'participant' && dashboard && <>
-        <section className="welcome-row">
-          <div><div className="eyebrow">TU LABORATORIO · {dashboard.event.participation_mode==='team'?'EN EQUIPO':'INDIVIDUAL'}</div><h1>¡Vamos, {participant?.name || 'equipo'}!</h1><p>{dashboard.event.participation_mode==='team'?'Tu equipo es':'Tu espacio individual es'} <b>{dashboard.team.name}</b>. Completa misiones para sumar puntos.</p></div>
-          <div className="score-card"><Trophy size={21}/><div><b>{dashboard.team.score}</b><span>puntos</span></div></div>
-        </section>
-        {pendingEvaluation?.status==='pending' && <div className="evaluation-pending" role="status"><b>Tu entrega está en cola</b><span>{pendingEvaluation.queue_position ? `Posición ${pendingEvaluation.queue_position} en este evento · ${pendingEvaluation.queue_total} esperando.` : 'Esperando un cupo disponible.'} Puedes seguir revisando las instrucciones; no necesitas volver a enviarla.</span></div>}
+        <header className="workbench-header">
+          <div><h1>{dashboard.event.title}</h1><p>{dashboard.program?.duration_minutes ? `${dashboard.program.duration_minutes} minutos · ` : ''}{dashboard.missions.length} misiones · {participant?.name || dashboard.team.name}</p></div>
+          <div className="workbench-totals"><div className="score-card"><Trophy size={21}/><b>{dashboard.team.score}</b><span>puntos</span></div><span className="coin-badge"><Coins size={16}/>{dashboard.wallet?.balance||0} monedas</span></div>
+        </header>
         {participant?.is_team_leader && teamInvite && <div className="side-card team-invite-card"><div className="section-heading"><h3><Users size={17}/> Invita a tu equipo</h3><button className="secondary-button" onClick={copyTeamInvite}>Copiar enlace</button></div><p>Comparte este enlace con tus compañeros para que se registren directamente en <b>{teamInvite.team_name}</b>.</p><input className="invite-link" aria-label="Enlace de invitación" readOnly value={new URL(teamInvite.invite_url, window.location.origin).toString()} onFocus={e=>e.currentTarget.select()}/><div className="invite-code">{teamInvite.invite_code}</div><p className="muted-note">El código solo se muestra al líder. Guárdalo antes de cerrar esta sesión.</p></div>}
-        <section className="lab-mission-control">
-          <div className="lab-focus"><span className="eyebrow">TU SIGUIENTE RETO</span><h2>{currentMission?.title||'¡Misiones completadas!'}</h2><p>{missionClosed?'El tiempo terminó. Puedes revisar tu trabajo mientras el instructor abre la siguiente misión.':currentMission?.description}</p><div className="lab-focus-meta"><button className="primary-button" onClick={()=>{if(currentMission)setSelectedMission(currentMission);window.setTimeout(()=>document.getElementById('mission-workspace')?.scrollIntoView({behavior:'smooth',block:'start'}),0);}}>{missionClosed?'Revisar misión':'Continuar misión'}<ArrowRight size={16}/></button><span>{dashboard.missions.filter(m=>m.completed).length} / {dashboard.missions.length} misiones completadas</span><span className="coin-badge"><Coins size={17}/>{dashboard.wallet?.balance||0} monedas</span></div></div>
-          <MissionTimer clock={dashboard.mission_clock} onClosed={()=>setClockExpired(true)}/>
-        </section>
-        <div className="lab-journey" aria-label="Recorrido del laboratorio">{['Conecta tu repositorio','Valida tu plan','Despliega en Actions','Explora tu infraestructura'].map((step,index)=><div key={step}><span>{String(index+1).padStart(2,'0')}</span><b>{step}</b>{index<3&&<ChevronRight size={16}/>}</div>)}</div>
-        <Playground key={token} token={token} eventStatus={dashboard.event.status}/>
-        <section className="content-grid">
-          <div className="main-column">
-            <div className="section-heading"><div><div className="eyebrow">RUTA DE MISIONES</div><h2>{dashboard.event.title}</h2></div><button className="icon-button" onClick={()=>refreshParticipant()}><RefreshCw size={16}/></button></div>
-            <div className="mission-list">
-              {dashboard.missions.map((m,i)=><button key={m.id} className={`mission-card ${m.active?'active':''} ${m.completed?'complete':''} ${m.locked?'locked':''}`} onClick={()=>{setSelectedMission(m);setAnswer('');}} disabled={m.locked}>
-                <div className="mission-num">{m.completed?<Check size={18}/>:String(i+1).padStart(2,'0')}</div>
-                <div className="mission-info"><div className="mission-meta"><span>{m.category.toUpperCase()}</span><span>{m.duration_minutes} MIN</span></div><h3>{m.title}</h3><p>{m.description}</p></div>
-                <div className="mission-points">{m.completed?<CheckCircle2 size={19}/>:<><b>{m.points}</b><small>PTS</small></>}</div>
-              </button>)}
-            </div>
-            {selectedMission && <div className="mission-detail" id="mission-workspace">
-              <div className="detail-head"><div><div className="eyebrow">MISSION BRIEFING</div><h3>{selectedMission.title}</h3></div><button className="icon-button" onClick={()=>setSelectedMission(null)}><XCircle size={18}/></button></div>
+
+        <section className="lab-mission-control"><div className="lab-focus"><div className="eyebrow"><Target size={14}/> MISIÓN ACTUAL</div><h2>{dashboard.event.missions_started===false?"Esperando al instructor":currentMission?.title||"Taller finalizado"}</h2><p>{dashboard.event.missions_started===false?"Ya estás conectado al laboratorio. La misión 1 comenzará cuando el instructor la inicie.":currentMission?.description}</p><div className="lab-focus-meta"><span>{dashboard.missions.filter(m=>m.completed).length} de {dashboard.missions.length} completadas</span>{dashboard.event.missions_started!==false&&<span>{currentMission?.duration_minutes} minutos</span>}</div></div><MissionTimer clock={dashboard.mission_clock} onClosed={()=>setClockExpired(true)}/></section>
+        <div className="workbench">
+          <aside className="mission-navigation" aria-label="Misiones del taller">
+            <h2>Misiones</h2>
+            <nav>{dashboard.missions.map((mission,index)=><button key={mission.id} disabled={mission.locked} className={selectedMission?.id===mission.id?'current':''} aria-current={selectedMission?.id===mission.id?'step':undefined} onClick={()=>{setSelectedMission(mission);setAnswer('');setWorkspaceTab('mission');}}>
+              <span className={`navigation-number ${mission.completed?'done':''}`}>{mission.completed?<Check size={15}/>:String(index+1).padStart(2,'0')}</span>
+              <span><b>{mission.title}</b><small>{mission.duration_minutes} min{mission.completed?' · Completada':mission.active?' · Activa':''}</small></span>
+            </button>)}</nav>
+            <p className="navigation-note">{dashboard.event.status==='paused'?'Partida pausada':dashboard.event.status==='finished'?'Partida finalizada':'El instructor abre cada misión.'}</p>
+          </aside>
+          <div className="workspace-main">
+            <div className="workspace-tabs" role="tablist" aria-label="Secciones del laboratorio">{([['mission','Misión'],...(dashboard.program?.architecture?([['architecture','Arquitectura']] as const):[]),['infrastructure','Infraestructura'],['activity','Actividad'],['ranking','Clasificación']] as const).map(([key,label])=><button role="tab" aria-selected={workspaceTab===key} key={key} onClick={()=>setWorkspaceTab(key)}>{label}{key==='activity'&&pendingEvaluation&&<span className="activity-dot"/>}</button>)}</div>
+            <div className="workspace-heading"><h2>{workspaceTab==='mission'?selectedMission?.title:workspaceTab==='infrastructure'?'Infraestructura':workspaceTab==='activity'?'Actividad de tus entregas':workspaceTab==='architecture'?'Arquitectura':'Clasificación'}</h2><MissionTimer clock={dashboard.mission_clock} onClosed={()=>setClockExpired(true)}/></div>
+            {missionClosed&&!dashboard.mission_clock?.waiting&&<p className="mission-closed-note" role="status">El tiempo de la misión terminó. La siguiente se activará automáticamente si quedan misiones. Las entregas registradas a tiempo pueden finalizar.</p>}
+            {workspaceTab==='mission'&&selectedMission&&<div className="mission-detail" id="mission-workspace">
               <p>{selectedMission.description}</p>
               <ol>{selectedMission.instructions?.map((step,i)=><li key={i}>{step}</li>)}</ol>
               {selectedMission.materials && <section className="lab-materials">
-                <div className="lab-step-heading"><Download size={17}/><div><h4>Materiales del laboratorio</h4><p>{selectedMission.materials.title}. Incluye la estructura del proyecto y una guía para trabajar desde el navegador.</p></div></div>
-                <button className="primary-button" onClick={downloadMissionKit} disabled={busy}><Download size={16}/>{busy?'Preparando descarga…':'Descargar kit inicial (.zip)'}</button>
-                <ol>{selectedMission.materials.instructions.map((instruction,index)=><li key={index}>{instruction}</li>)}</ol>
-                <p className="muted-note">El kit incluye ejercicios pendientes. Descargarlo no completa la misión ni concede puntos.</p>
+                <div className="lab-step-heading"><Download size={17}/><div><h4>Materiales del laboratorio</h4><p>{selectedMission.materials.title}</p></div></div>
+                <button className="primary-button" onClick={downloadMissionKit} disabled={busy}><Download size={16}/>{busy?'Preparando descarga…':'Descargar archivos (.zip)'}</button>
+                <details className="help-notes"><summary>Cómo usar estos archivos</summary><ol>{selectedMission.materials.instructions.map((instruction,index)=><li key={index}>{instruction}</li>)}</ol></details>
+
               </section>}
-              {selectedMission.resources && <section className="lab-resources">
-                <h4>Recursos previstos del laboratorio</h4>
+              {selectedMission.resources && <details className="help-notes architecture-notes">
+                <summary>Arquitectura del ejercicio</summary>
                 <div className="lab-resource-list">{selectedMission.resources.map(resource=><div className="lab-resource" key={resource.name}><b>{resource.name}</b><span>{resource.purpose}</span></div>)}</div>
-              </section>}
+              </details>}
               {selectedMission.id==='mission-02' && <section className="lab-repository">
-                <div className="lab-step-heading"><Github size={17}/><div><h4>1. Vincula el repositorio de tu equipo</h4><p>El repositorio debe existir en GitHub y contener el laboratorio y el workflow indicado arriba.</p></div></div>
+                <div className="lab-step-heading"><Github size={17}/><div><h4>Repositorio de GitHub</h4><p>Vincula el repositorio donde subirás los archivos del laboratorio.</p></div></div>
                 {dashboard.team.github_repo_url && <div className="lab-repository-connected"><CheckCircle2 size={17}/><span>Repositorio vinculado: <a href={dashboard.team.github_repo_url} target="_blank" rel="noreferrer">{dashboard.team.github_repo_name || dashboard.team.github_repo_url}<ExternalLink size={13}/></a></span></div>}
                 {dashboard.team.github_repo_url && <div className="github-authorization">
                   {dashboard.github?.authorized ? <p>Acceso autorizado por <b>{dashboard.github.login}</b>.</p> : dashboard.github?.available ? <>
@@ -373,49 +421,46 @@ export default function App() {
                 <div className="lab-repository-points">Puntaje de la misión: {selectedMission.repository_link_points ?? 1} punto por vincular el repositorio + {selectedMission.points - (selectedMission.repository_link_points ?? 1)} puntos por superar la validación técnica oficial. La aprobación del evaluador oficial concede esos puntos; encontrar archivos o completar un workflow por sí solo no los concede.</div>
               </section>}
               {selectedMission.quiz && <form onSubmit={submitAnswer} className="quiz-form"><b>{selectedMission.quiz.question}</b>{selectedMission.quiz.options.map(option=><label className={`option ${answer===option?'chosen':''}`} key={option}><input type="radio" name="answer" value={option} checked={answer===option} onChange={()=>setAnswer(option)}/>{option}</label>)}<button className="primary-button" disabled={!answer||busy||missionClosed||!selectedMission.active||dashboard.event.status!=='open'}>{missionClosed?'Tiempo agotado':'Enviar respuesta'} <ArrowRight size={16}/></button></form>}
+              {!!dashboard.hints?.[selectedMission.id]?.length && <details className="hint-drawer"><summary>Pistas <span>{dashboard.hints[selectedMission.id].length} disponibles · {dashboard.wallet?.balance||0} monedas</span></summary>
               <HintShop key={token+selectedMission.id} token={token} mission={selectedMission.id} hints={dashboard.hints?.[selectedMission.id]||[]} balance={dashboard.wallet?.balance||0} closed={missionClosed||!selectedMission.active||dashboard.event.status!=='open'} onChanged={refreshParticipant}/>
-              {selectedMission.workflow && <section className="lab-repository">
-                <div className="lab-step-heading"><Code2 size={17}/><div><h4>Solicita la evaluación de tu entrega</h4><p>Guarda tus cambios en GitHub y ejecuta el workflow de esta misión desde Actions.</p></div></div>
-                {displayedEvaluation && <div className="evaluation-pending" role="status">
-                  <b>{displayedEvaluation.status==='passed' && displayedEvaluation.operation==='plan' ? 'Plan validado · falta desplegar' : {pending:'Entrega pendiente', preparing:'Revisando entrega', running:'Evaluando la misión', passed:'Entrega aprobada', failed:'Entrega con errores', blocked:'Evaluación bloqueada'}[displayedEvaluation.status]} · {displayedEvaluation.mission_id}</b>
-                  <span>{displayedEvaluation.repo_name} · <code>{displayedEvaluation.commit_sha}</code></span>
-                  {displayedEvaluation.status==='pending' && displayedEvaluation.queue_position && <span>Posición {displayedEvaluation.queue_position} en la cola de este evento · {displayedEvaluation.queue_total} esperando. Tu entrega está guardada; no necesitas enviarla otra vez.</span>}
-                  <span>{displayedEvaluation.message || 'Esperando la revisión automática del repositorio.'}</span>
-                  {displayedEvaluation.source==='github-actions' && <a href={displayedEvaluation.actions_url} target="_blank" rel="noreferrer">Ver ejecución en GitHub Actions <ExternalLink size={13}/></a>}
-                  {!!displayedEvaluation.progress?.length && <ol className="evaluation-progress" aria-label="Etapas de evaluación">{displayedEvaluation.progress.filter((stage,index,all)=>!all.slice(index+1).some(next=>next.stage===stage.stage)).map(stage=><li key={stage.stage} data-status={stage.status}><span>{stage.status==='passed'?'✓':stage.status==='failed'?'×':'◌'}</span> {stage.message} <small>{stage.status==='running'?'En curso':stage.status==='passed'?'Completado':'Con errores'}</small></li>)}</ol>}
-                  {displayedEvaluation.missing_files && <ul>{displayedEvaluation.missing_files.map(path=><li key={path}><code>{path}</code></li>)}</ul>}
-                  <span>Solicitud {displayedEvaluation.evaluation_id} · Intento {displayedEvaluation.attempt || 1}.{displayedEvaluation.status==='passed' ? ` +${displayedEvaluation.points_awarded || 0} puntos.` : ' Solo una validación técnica aprobada concede puntos.'}</span>
-                </div>}
-                {selectedMission.materials && <div className="actions-setup"><b>Entregas con GitHub Actions</b><p>Usa el workflow del kit actualizado y crea la variable de repositorio <code>ARENA_EVENT_ID</code> con este valor:</p><code>{dashboard.event.event_id}</code><p>Al guardar cambios en la rama predeterminada, Actions solicitará la revisión. Aquí aparecerán sus etapas y resultado. Autoriza primero el repositorio con la GitHub App.</p></div>}
-                <p className="muted-note">Las entregas se envían desde GitHub Actions. Para reintentar un commit fallido o bloqueado, abre Run workflow y activa retry. Las misiones aprobadas no vuelven a sumar puntos.</p>
-              </section>}
-              {!selectedMission.quiz && !selectedMission.workflow && <div className="hint-box"><BookOpen size={17}/><span>Esta misión requiere validación técnica. Sigue las instrucciones del instructor.</span></div>}
+              </details>}
+
+              {selectedMission.workflow&&<div className="submission-actions">{dashboard.team.github_repo_url&&<a className="primary-button" href={`${dashboard.team.github_repo_url}/actions/workflows/${selectedMission.workflow.split('/').pop()}`} target="_blank" rel="noreferrer">Abrir workflow en GitHub <ExternalLink size={15}/></a>}<button className="text-button" onClick={()=>setWorkspaceTab('activity')}>Ver entregas y resultado</button></div>}
+              {selectedMission.workflow&&<details className="help-notes"><summary>Configuración de Actions y reintentos</summary><p>Crea la variable <code>ARENA_EVENT_ID</code> en tu repositorio con este valor:</p><code className="event-id-copy">{dashboard.event.event_id}</code><p>Ejecuta el workflow en la rama predeterminada. Si una entrega falla, usa Run workflow con retry. Los puntos se conceden una sola vez.</p></details>}
             </div>}
+            {workspaceTab==='architecture'&&dashboard.program?.architecture&&<ArchitectureDiagram architecture={dashboard.program.architecture}/>}
+            {workspaceTab==='infrastructure'&&<Playground key={token} token={token} eventStatus={dashboard.event.status}/>}
+            {workspaceTab==='activity'&&<section className="activity-list" aria-label="Entregas">
+              {!dashboard.evaluations.length&&<p className="workspace-empty">Todavía no tienes entregas. Ejecuta el workflow de tu misión desde GitHub Actions.</p>}
+              {[...dashboard.evaluations].sort((a,b)=>(b.updated_at||b.created_at).localeCompare(a.updated_at||a.created_at)).map(evaluation=><article className="run-record" key={evaluation.evaluation_id}>
+                <header><div><b>{evaluation.mission_id} · {evaluation.operation==='plan'?'Plan':evaluation.operation==='deploy'?'Despliegue':'Evaluación'}</b><span>{new Date(evaluation.updated_at||evaluation.created_at).toLocaleString()} · <code title={evaluation.commit_sha}>{evaluation.commit_sha.slice(0,8)}</code></span></div><strong data-status={evaluation.status}>{evaluation.status==='passed'&&evaluation.operation==='plan'?'Plan válido; falta deploy':{pending:'En cola',preparing:'Preparando',running:'En ejecución',passed:'Aprobada',failed:'Con errores',blocked:'Bloqueada'}[evaluation.status]}</strong></header>
+                <p>{evaluation.message}</p>
+                {evaluation.status==='pending'&&evaluation.queue_position&&<p>Posición {evaluation.queue_position} en la cola del evento. No necesitas volver a enviar.</p>}
+                {!!evaluation.progress?.length&&<details><summary>Ver etapas</summary><ol className="evaluation-progress">{evaluation.progress.filter((stage,index,all)=>!all.slice(index+1).some(next=>next.stage===stage.stage)).map(stage=><li key={stage.stage} data-status={stage.status}><span>{stage.status==='passed'?'✓':stage.status==='failed'?'×':'·'}</span>{stage.message}<small>{stage.status==='running'?'En curso':stage.status==='passed'?'Completado':'Con errores'}</small></li>)}</ol></details>}
+                {evaluation.actions_url&&<a href={evaluation.actions_url} target="_blank" rel="noreferrer">Abrir ejecución en GitHub <ExternalLink size={13}/></a>}
+              </article>)}
+            </section>}
+            {workspaceTab==='ranking'&&<section className="ranking-table"><p className="muted-note">A igual puntaje, primero quien lo alcanzó antes con sus respuestas aprobadas.</p><table><thead><tr><th>Posición</th><th>{dashboard.event.participation_mode==='team'?'Equipo':'Participante'}</th><th>Puntos</th></tr></thead><tbody>{leaderboard.map(row=><tr key={row.team_id} className={row.is_mine?'mine':''}><td>{row.rank}</td><td>{row.name}{row.is_mine?' (tú)':''}</td><td>{row.score}</td></tr>)}</tbody></table></section>}
           </div>
-          <aside className="side-column">
-            <div className="side-card"><div className="section-heading"><h3><Trophy size={17}/> {dashboard.event.participation_mode==='team'?'Leaderboard de equipos':'Leaderboard individual'}</h3><button className="icon-button" onClick={()=>refreshParticipant()}><RefreshCw size={14}/></button></div>
-              {leaderboard.slice(0,10).map(row=><div className={`rank-row ${row.is_mine?'mine':''}`} key={row.team_id}><span className="rank-num">{row.rank===1?'🏆':row.rank}</span><span className="rank-name">{row.name}{row.is_mine&&<small>{dashboard.event.participation_mode==='team'?' TU EQUIPO':' TÚ'}</small>}</span><b>{row.score}</b></div>)}
-            </div>
-            <div className="side-card tips"><div className="eyebrow">RECUERDA</div><h3>¿Te atascaste? Hay una pista.</h3><p>Completa misiones para ganar monedas. En el centro de pistas puedes comprar orientaciones sin reducir tu puntuación. Revisa también el resultado de tu entrega en Actions.</p><div className="tip-icon"><Target size={21}/></div></div>
-          </aside>
-        </section>
+        </div>
       </>}
 
       {instructorRoute && view === 'admin' && role === 'admin' && adminData && <>
         <section className="welcome-row"><div><div className="eyebrow">INSTRUCTOR CONSOLE</div><h1>Control de la Arena</h1><p>{adminData.event?.title || 'Sin evento configurado'}</p></div><button className="secondary-button" onClick={()=>refreshAdmin()}><RefreshCw size={16}/> Actualizar</button></section>
-        {!adminData.event && <div className="side-card event-create"><h3>Crear una nueva experiencia</h3><p>Define si los participantes trabajarán individualmente o crearán equipos.</p><form className="form-stack" onSubmit={createEvent}><label>Nombre del evento<input value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} minLength={4} maxLength={100}/></label><label>Modalidad del laboratorio<select value={newEventMode} onChange={e=>setNewEventMode(e.target.value as 'individual'|'team')}><option value="team">Por equipos</option><option value="individual">Individual</option></select></label>{newEventMode==='team' && <label>Integrantes por equipo<input type="number" min="2" max="6" value={newEventTeamSize} onChange={e=>setNewEventTeamSize(Number(e.target.value))}/></label>}<label>Cupo máximo de participantes<input type="number" min="1" max="500" value={newEventMaxParticipants} onChange={e=>setNewEventMaxParticipants(Number(e.target.value))}/></label><button className="primary-button" disabled={busy}>Crear evento <ArrowRight size={16}/></button></form></div>}
+        {!adminData.event && <div className="side-card event-create"><h3>Crear una nueva experiencia</h3><p>Define si los participantes trabajarán individualmente o crearán equipos.</p><form className="form-stack" onSubmit={createEvent}><label>Nombre del evento<input value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} minLength={4} maxLength={100}/></label><label>Programa<select value={newEventPack} onChange={e=>setNewEventPack(e.target.value)}>{gamePacks.map(pack=><option key={pack.id} value={pack.id}>{pack.title} · {pack.duration_minutes} min · {pack.missions} misiones</option>)}</select></label><label>Modalidad del laboratorio<select value={newEventMode} onChange={e=>setNewEventMode(e.target.value as 'individual'|'team')}><option value="team">Por equipos</option><option value="individual">Individual</option></select></label>{newEventMode==='team' && <label>Integrantes por equipo<input type="number" min="2" max="6" value={newEventTeamSize} onChange={e=>setNewEventTeamSize(Number(e.target.value))}/></label>}<label>Cupo máximo de participantes<input type="number" min="1" max="500" value={newEventMaxParticipants} onChange={e=>setNewEventMaxParticipants(Number(e.target.value))}/></label><button className="primary-button" disabled={busy}>Crear evento <ArrowRight size={16}/></button></form></div>}
         {createdEvent && <div className="side-card created-event-card"><h3>Evento creado correctamente</h3><p>Comparte este código con los participantes:</p><div className="invite-code">{createdEvent.event_code}</div><p className="muted-note">Modalidad: <b>{createdEvent.participation_mode==='team'?`Equipos de ${createdEvent.team_size}`:'Individual'}</b> · Cupo: <b>{createdEvent.max_participants}</b>. {createdEvent.participation_mode==='team'?'Cada líder creará su equipo y compartirá su propio enlace de invitación.':'Cada participante tendrá un registro y marcador individual.'}</p></div>}
         {adminData.event && <>
+          <div className="side-card program-control"><h3>Programa del evento</h3><p>Actual: {gamePacks.find(pack=>pack.id===adminData.event?.game_pack)?.duration_minutes} minutos · {adminData.missions?.length} misiones. Cambiarlo conserva el progreso compatible.</p><label>Programa<select value={newEventPack} onChange={e=>setNewEventPack(e.target.value)}>{gamePacks.map(pack=><option key={pack.id} value={pack.id}>{pack.title} · {pack.duration_minutes} min · {pack.missions} misiones</option>)}</select></label><button className="secondary-button" disabled={busy||newEventPack===adminData.event.game_pack} onClick={()=>void changeProgram()}>Aplicar al evento actual</button></div>
           <div className="admin-stats"><div className="stat-card"><Users/><b>{adminData.participants}</b><span>Participantes</span></div><div className="stat-card"><Flag/><b>{adminData.teams.length}</b><span>{adminData.event.participation_mode==='team'?'Equipos':'Registros individuales'}</span></div><div className="stat-card"><CheckCircle2/><b>{adminData.submissions}</b><span>Misiones validadas</span></div><div className="stat-card"><Activity/><b>{adminData.event.status}</b><span>Estado del evento</span></div></div>
           {adminData.evaluation_queue && <div className="side-card"><b>Cola de evaluaciones del evento</b><p>{adminData.evaluation_queue.waiting} esperando · {adminData.evaluation_queue.running} en preparación o ejecución · máximo {adminData.evaluation_queue.execution_limit} ejecuciones compartidas. Límite global: {adminData.evaluation_queue.admission_limit} entregas admitidas.</p></div>}
           <section className="admin-grid">
-            <div className="side-card"><div className="section-heading"><h3>Control de partida</h3></div><div className="control-row"><span>Estado</span><div className="inline-actions"><button className="small-button" onClick={()=>adminStatus('open')}><Play size={14}/> Abrir</button><button className="small-button" onClick={()=>adminStatus('paused')}><Pause size={14}/> Pausar</button><button className="small-button danger" onClick={()=>adminStatus('finished')}><Flag size={14}/> Finalizar</button></div></div><div className="control-row"><span>Misión activa</span><b>{adminData.event.active_mission_id}</b></div>
-              <label className="timer-config">Duración al activar (minutos)<input type="number" min="1" max="240" value={missionDuration} placeholder="Duración del Game Pack" onChange={e=>setMissionDuration(e.target.value?Number(e.target.value):'')}/><small>Activar o reiniciar comienza un reloj nuevo. Pausar el evento congela el tiempo.</small></label><MissionTimer clock={adminData.mission_clock}/><div className="mission-activation">{(adminData.missions||[]).map((mission,i)=><button key={mission.id} className={`small-button ${adminData.event?.active_mission_id===mission.id?'selected':''}`} onClick={()=>activateMission(mission.id)} title={mission.title}>{String(i+1).padStart(2,'0')} · {adminData.event?.active_mission_id===mission.id?'Reiniciar':'Activar'}</button>)}</div>
+            <div className="side-card"><div className="section-heading"><h3>Control de partida</h3></div><div className="control-row"><span>Estado</span><div className="inline-actions"><button className="small-button" onClick={()=>adminStatus('open')}><Play size={14}/> Abrir</button><button className="small-button" onClick={()=>adminStatus('paused')}><Pause size={14}/> Pausar</button><button className="small-button danger" onClick={()=>adminStatus('finished')}><Flag size={14}/> Finalizar</button></div></div><div className="control-row"><span>Misión activa</span><b>{adminData.event.missions_started===false?"Pendiente de inicio":adminData.event.active_mission_id}</b></div>
+              <label className="timer-config">Duración al activar (minutos)<input type="number" min="1" max="240" value={missionDuration} placeholder="Duración del Game Pack" onChange={e=>setMissionDuration(e.target.value?Number(e.target.value):'')}/><small>Activar o reiniciar comienza un reloj nuevo. Pausar el evento congela el tiempo.</small></label><MissionTimer clock={adminData.mission_clock}/><div className="mission-activation">{(adminData.missions||[]).map((mission,i)=><button key={mission.id} className={`small-button ${adminData.event?.active_mission_id===mission.id?'selected':''}`} disabled={busy||(adminData.event?.missions_started===false&&i!==0)} onClick={()=>activateMission(mission.id)} title={mission.title}>{String(i+1).padStart(2,'0')} · {adminData.event?.missions_started===false?(i===0?'Iniciar misión 1':'Pendiente'):adminData.event?.active_mission_id===mission.id?'Reiniciar':'Activar'}</button>)}</div>
             </div>
-            <div className="side-card"><div className="section-heading"><h3><Trophy size={17}/> Clasificación</h3></div><div className="team-table">{adminData.teams.map((team,i)=><div className="team-table-row" key={team.team_id}><span>#{i+1}</span><b>{team.name}</b><span>{team.members}/{adminData.event?.participation_mode==='team'?(adminData.event?.team_size ?? 5):1}</span><strong>{team.score} pts</strong></div>)}</div><p className="muted-note">La puntuación proviene de evidencias verificadas. Las monedas se obtienen al completar misiones y no alteran el ranking.</p></div>
+            <div className="side-card"><div className="section-heading"><h3><Trophy size={17}/> Clasificación</h3><button className="secondary-button" disabled={busy} onClick={()=>void openLeaderboardScreen()}><ExternalLink size={15}/> Abrir marcador</button></div><p className="muted-note">El enlace muestra nombres y puntos sin iniciar sesión. Compártelo para proyectar la clasificación.</p><button className="text-button" onClick={()=>void revokeLeaderboardScreen()}>Desactivar enlace público</button><div className="team-table">{adminData.teams.map((team,i)=><div className="team-table-row" key={team.team_id}><span>#{i+1}</span><b>{team.name}</b><span>{team.members}/{adminData.event?.participation_mode==='team'?(adminData.event?.team_size ?? 5):1}</span><strong>{team.score} pts</strong></div>)}</div><p className="muted-note">La puntuación proviene de evidencias verificadas. Las monedas se obtienen al completar misiones y no alteran el ranking. A igual puntaje, primero quien lo alcanzó antes.</p></div>
           </section>
         </>}
-        {adminData.event && <div className="side-card event-create"><h3>Crear otra partida</h3><form className="form-stack" onSubmit={createEvent}><label>Nombre del evento<input value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} minLength={4} maxLength={100}/></label><label>Modalidad del laboratorio<select value={newEventMode} onChange={e=>setNewEventMode(e.target.value as 'individual'|'team')}><option value="team">Por equipos</option><option value="individual">Individual</option></select></label>{newEventMode==='team' && <label>Integrantes por equipo<input type="number" min="2" max="6" value={newEventTeamSize} onChange={e=>setNewEventTeamSize(Number(e.target.value))}/></label>}<label>Cupo máximo de participantes<input type="number" min="1" max="500" value={newEventMaxParticipants} onChange={e=>setNewEventMaxParticipants(Number(e.target.value))}/></label><button className="secondary-button" disabled={busy}>Crear nueva partida</button></form></div>}
+        {adminData.event && <div className="side-card event-create"><h3>Crear otra partida</h3><form className="form-stack" onSubmit={createEvent}><label>Nombre del evento<input value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} minLength={4} maxLength={100}/></label><label>Programa<select value={newEventPack} onChange={e=>setNewEventPack(e.target.value)}>{gamePacks.map(pack=><option key={pack.id} value={pack.id}>{pack.title} · {pack.duration_minutes} min · {pack.missions} misiones</option>)}</select></label><label>Modalidad del laboratorio<select value={newEventMode} onChange={e=>setNewEventMode(e.target.value as 'individual'|'team')}><option value="team">Por equipos</option><option value="individual">Individual</option></select></label>{newEventMode==='team' && <label>Integrantes por equipo<input type="number" min="2" max="6" value={newEventTeamSize} onChange={e=>setNewEventTeamSize(Number(e.target.value))}/></label>}<label>Cupo máximo de participantes<input type="number" min="1" max="500" value={newEventMaxParticipants} onChange={e=>setNewEventMaxParticipants(Number(e.target.value))}/></label><button className="secondary-button" disabled={busy}>Crear nueva partida</button></form></div>}
       </>}
     </main>
     <footer className="footer"><span>CloudOps Arena <b>·</b> GameDay platform</span><span>Learn by building.</span></footer>

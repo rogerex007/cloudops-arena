@@ -119,3 +119,49 @@ La concurrencia de VMs permanece en dos. Las misiones 03/04 conservan sus jueces
 actuales de fixtures efímeras; su conexión al playground persistente es trabajo
 independiente. No se presenta esta entrega como producción certificada ni como
 un taller completo ya validado bajo carga.
+
+## Avance automático de misiones
+
+El servidor comprueba cada dos segundos los eventos abiertos con reloj vencido.
+Cierra la misión anterior y activa la siguiente según el orden del Game Pack,
+con su duración completa desde la transición. No depende de visitas al portal.
+Después de una interrupción no salta todas las misiones atrasadas: concede el
+tiempo completo a la siguiente. Eventos sin reloj y eventos pausados no avanzan.
+
+La actualización condiciona estado, pack, misión y deadline originales: dos APIs
+concurrentes, una pausa o un reinicio del instructor no pueden sobrescribirse con
+una transición calculada sobre datos anteriores. No modifica puntuaciones,
+compras ni aprobaciones. El cierre existente del servidor impide entregas nuevas
+de una misión vencida aunque el navegador tarde en actualizarse.
+
+Al vencer la última se marca `mission_sequence_complete=true` en META, sin
+finalizar el evento. El reloj queda vencido: se pueden consultar recursos y las
+entregas aceptadas a tiempo pueden finalizar. El instructor decide cuándo cerrar
+la partida y limpiar los laboratorios. Activar/reiniciar una misión elimina esa
+marca. `auto_advance_missions=false` en META desactiva el avance para operación
+manual; por defecto los eventos con reloj participan en el avance automático.
+
+El portal de participante selecciona la nueva misión en su siguiente consulta
+(6–9 segundos); instructor se actualiza cada 5 segundos. La pantalla pública
+conserva su consulta cada 3 segundos. No hay nuevos secretos ni variables de
+entorno. El proceso usa el lifespan de la API y consulta eventos mediante scan;
+antes de ampliar a muchos eventos simultáneos conviene un índice de vencimientos.
+
+## Apertura e inicio separados
+
+Los eventos nuevos se crean abiertos para registro, con `missions_started=false`,
+`active_mission_id` vacío y sin `mission_deadline`. Se pueden registrar alumnos y
+equipos sin consumir tiempo. El portal muestra «Esperando al instructor» y el
+reloj «Por iniciar»; no hay misión activa ni entregas habilitadas.
+
+En instructor, abre la partida para que entren los asistentes y pulsa **Iniciar
+misión 1** cuando estén listos. Esa acción usa el endpoint de activación existente,
+marca `missions_started=true` y comienza la duración completa de la primera misión.
+El avance automático toma el control a partir de ese momento. Abrir o reanudar
+un evento que todavía espera no comienza la primera misión. Si se inicia mientras
+está pausado, el reloj permanece congelado hasta reabrir la partida.
+
+La API rechaza iniciar otra misión antes de la primera y el planificador ignora
+la sala de espera incluso si tuviera un deadline residual. Los eventos antiguos
+sin la nueva marca conservan su comportamiento y progreso; este despliegue no
+reinicia partidas existentes.

@@ -28,15 +28,15 @@ export default function Playground({token,eventStatus}:{token:string;eventStatus
   const titles={functions:'Lambda',tables:'DynamoDB',queues:'SQS',buses:'EventBridge'};
   return <section className="playground-console side-card" aria-label="Mi playground">
     <div className="section-heading"><div><div className="eyebrow">INFRAESTRUCTURA DEL LABORATORIO</div><h2><Cloud size={22}/> Mi playground</h2></div><button className="secondary-button" onClick={()=>setRefreshKey(value=>value+1)}><RefreshCw size={16}/> Actualizar vista</button></div>
-    <div className="playground-status" role="status"><b>{snapshot?'Desplegado · conservado en disco':deployment?.status==='expired'?'Laboratorio finalizado':'Sin despliegue del participante'}</b></div>
+    <div className="playground-status" role="status"><b>{snapshot?'Despliegue verificado':deployment?.status==='expired'?'Laboratorio finalizado':'Aún no hay un despliegue'}</b></div>
     <p>{deployment?.message||'No se muestran recursos sin un despliegue asociado a tu entrega.'}</p>
     {snapshot&&<>
-      <p>Repositorio: <b>{deployment?.repo_name}</b> · Commit: <code>{deployment?.deployment?.commit_sha}</code></p>
-      <p className="muted-note"><b>Última captura:</b> {new Date((deployment?.captured_at||0)*1000).toLocaleString()}. La VM se conserva apagada entre operaciones; esta vista no es en vivo.</p>
+      <p>Repositorio: <b>{deployment?.repo_name}</b> · Commit: <code title={deployment?.deployment?.commit_sha}>{deployment?.deployment?.commit_sha.slice(0,8)}</code></p>
+      <p className="muted-note"><b>Última captura:</b> {new Date((deployment?.captured_at||0)*1000).toLocaleString()}. Esta es una vista guardada, no una consola en vivo.</p>
       <div className="playground-tabs">{(Object.keys(titles) as (keyof typeof titles)[]).map(key=><button key={key} className={`small-button ${tab===key?'selected':''}`} onClick={()=>setTab(key)}>{titles[key]} · {snapshot[key].length}</button>)}</div>
-      <div className="playground-resources">{snapshot[tab].map(name=><div key={name}><Cloud size={15}/><code>{name}</code><span>Desplegado</span></div>)}</div>
+      <div className="playground-resources">{snapshot[tab].map(name=><div key={name}><Cloud size={15}/><code>{name}</code><span>{tab==='buses'&&name==='default'?'Predeterminado':'Desplegado'}</span></div>)}</div>
     </>}
     {error&&<p className="playground-error" role="alert">{error}</p>}
-    <p className="muted-note">La infraestructura aparece tras un despliegue verificado desde Actions. Aprobar un plan o preparar una plantilla de referencia no equivale a desplegar tu entrega. Actualizar esta vista no crea recursos.</p>
+    <p className="muted-note">Los recursos aparecen después de aprobar el deploy de tu entrega. Actualizar solo consulta la última captura.</p>
   </section>;
 }

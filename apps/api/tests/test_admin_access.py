@@ -5,6 +5,9 @@ from app.main import app
 from app.security import create_token
 
 ROUTES=[
+    ('POST','/api/v1/admin/events/test/leaderboard-screen',None),
+    ('DELETE','/api/v1/admin/events/test/leaderboard-screen',None),
+    ('POST','/api/v1/admin/events/test/game-pack',{'game_pack':'aws-event-driven-60'}),
     ('GET','/api/v1/admin/dashboard',None),
     ('GET','/api/v1/admin/game-packs',None),
     ('GET','/api/v1/admin/lab-providers/health',None),

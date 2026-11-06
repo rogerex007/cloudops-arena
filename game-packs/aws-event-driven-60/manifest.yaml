@@ -1,0 +1,369 @@
+id: aws-event-driven-60
+title: Todo empieza con un evento
+subtitle: Laboratorio de una hora
+version: 1.0.0
+difficulty: beginner
+duration_minutes: 60
+team:
+  min_members: 3
+  max_members: 5
+technologies:
+- AWS Lambda
+- Amazon EventBridge
+- Amazon SQS
+- Amazon DynamoDB
+- Terraform
+- GitHub Actions
+scoring:
+  total_points: 75
+  bonus_points: 0
+missions:
+- id: mission-01
+  title: Entiende el recorrido
+  type: quiz
+  category: architecture
+  duration_minutes: 5
+  points: 10
+  description: Identifica cómo desacoplar el servicio de órdenes de los servicios de pago e inventario.
+  instructions:
+  - Una orden entra por HTTP. Orders la guarda y publica OrderCreated.
+  - EventBridge distribuye ese evento a las colas de pagos e inventario; cada consumidor procesa su cola.
+  - Responde qué componente permite distribuir el evento sin acoplar Orders a sus consumidores.
+  quiz:
+    question: ¿Qué servicio permite enrutar eventos a diferentes destinos usando reglas y patrones de filtrado?
+    options:
+    - Amazon EC2
+    - Amazon EventBridge
+    - Amazon EBS
+    - AWS CloudTrail
+  answer: Amazon EventBridge
+- id: mission-02
+  coin_reward: 10
+  hints:
+  - id: hint-1
+    title: Orden del pipeline
+    cost: 3
+    content: 'El paso de validación comprueba el plan. Agrega después el paso de deploy con ARENA_OPERATION: deploy;
+      conserva el cliente OIDC que escribe el primer paso.'
+  - id: hint-2
+    title: Si el deploy no aparece
+    cost: 6
+    content: Comprueba que .github/workflows/terraform-lab.yml esté en la rama predeterminada, ARENA_EVENT_ID coincida
+      con Arena y la App tenga acceso al repositorio. Un plan verde no crea recursos.
+  title: Despliega la infraestructura
+  type: lab
+  category: iac
+  duration_minutes: 15
+  points: 15
+  workflow_points: 14
+  repository_link_points: 1
+  workflow: .github/workflows/terraform-lab.yml
+  materials:
+    title: Kit inicial de la misión 02
+    revision: 1
+    instructions:
+    - Descarga los archivos y actualiza el workflow en tu repositorio.
+    - Agrega el paso de deploy del README y ejecuta Actions con ARENA_EVENT_ID.
+    files:
+    - source: starter/README.md
+      destination: README.md
+    - source: starter/LICENSE
+      destination: LICENSE
+    - source: starter/.gitignore
+      destination: .gitignore
+    - source: starter/terraform-lab.yml
+      destination: .github/workflows/terraform-lab.yml
+    - source: terraform/main.tf
+      destination: game-packs/aws-event-driven/terraform/main.tf
+    - source: terraform/variables.tf
+      destination: game-packs/aws-event-driven/terraform/variables.tf
+    - source: terraform/versions.tf
+      destination: game-packs/aws-event-driven/terraform/versions.tf
+    - source: terraform/outputs.tf
+      destination: game-packs/aws-event-driven/terraform/outputs.tf
+    - source: terraform/terraform.tfvars.example
+      destination: game-packs/aws-event-driven/terraform/terraform.tfvars.example
+    - source: terraform/.build/.gitkeep
+      destination: game-packs/aws-event-driven/terraform/.build/.gitkeep
+    - source: starter/orders.py
+      destination: game-packs/aws-event-driven/functions/orders/handler.py
+    - source: starter/payments.py
+      destination: game-packs/aws-event-driven/functions/payments/handler.py
+    - source: starter/inventory.py
+      destination: game-packs/aws-event-driven/functions/inventory/handler.py
+  evaluation:
+    validator: aws-event-driven-plan-v1
+    deployment_validator: aws-event-driven-deploy-v1
+    source_files:
+    - game-packs/aws-event-driven/terraform/main.tf
+    - game-packs/aws-event-driven/terraform/variables.tf
+    - game-packs/aws-event-driven/terraform/versions.tf
+    - game-packs/aws-event-driven/terraform/outputs.tf
+    - game-packs/aws-event-driven/functions/orders/handler.py
+    - game-packs/aws-event-driven/functions/payments/handler.py
+    - game-packs/aws-event-driven/functions/inventory/handler.py
+    required_files:
+    - .github/workflows/terraform-lab.yml
+    - game-packs/aws-event-driven/terraform/main.tf
+    - game-packs/aws-event-driven/terraform/variables.tf
+    - game-packs/aws-event-driven/terraform/versions.tf
+    - game-packs/aws-event-driven/functions/orders/handler.py
+    - game-packs/aws-event-driven/functions/payments/handler.py
+    - game-packs/aws-event-driven/functions/inventory/handler.py
+  description: Vincula tu repositorio, valida Terraform y agrega el paso de deploy para crear tu infraestructura
+    privada en Floci.
+  resources:
+  - name: Amazon API Gateway HTTP API
+    purpose: Expone el endpoint HTTP para crear órdenes.
+  - name: AWS Lambda
+    purpose: Ejecuta la función de órdenes y los consumidores de pagos e inventario.
+  - name: Amazon EventBridge
+    purpose: Recibe OrderCreated y lo enruta a los dos consumidores.
+  - name: Amazon SQS
+    purpose: Desacopla el procesamiento de pagos e inventario; cada cola tiene una Dead Letter Queue.
+  - name: Amazon DynamoDB
+    purpose: Guarda las órdenes y las claves de idempotencia de los consumidores.
+  - name: IAM
+    purpose: Otorga a las funciones los permisos necesarios para su trabajo.
+  instructions:
+  - Vincula y autoriza tu repositorio de GitHub.
+  - Descarga el kit, agrega el paso de deploy al workflow y ejecuta la misión en Actions.
+  - Cuando el despliegue sea aprobado, abre Infraestructura para revisar los recursos de ese commit.
+- id: mission-03
+  coin_reward: 10
+  hints:
+  - id: hint-1
+    title: Contrato de Orders
+    cost: 3
+    content: Orders recibe un evento HTTP. Decodifica el body, guarda la orden y publica un evento OrderCreated;
+      los consumidores reciben Records de SQS, no el mismo formato HTTP.
+  - id: hint-2
+    title: Seguir una orden
+    cost: 6
+    content: Usa un orderId estable para relacionar DynamoDB y el detail de EventBridge. Comprueba FailedEntryCount
+      al publicar y conserva el identificador hasta los consumidores.
+  title: Implementa Orders
+  type: lab
+  category: serverless
+  duration_minutes: 20
+  points: 20
+  workflow: .github/workflows/app-integration-tests.yml
+  evaluation:
+    validator: aws-event-driven-runtime-v1
+    source_files:
+    - game-packs/aws-event-driven/functions/orders/handler.py
+    - game-packs/aws-event-driven/functions/payments/handler.py
+    - game-packs/aws-event-driven/functions/inventory/handler.py
+    required_files:
+    - .github/workflows/app-integration-tests.yml
+    - game-packs/aws-event-driven/functions/orders/handler.py
+    - game-packs/aws-event-driven/functions/payments/handler.py
+    - game-packs/aws-event-driven/functions/inventory/handler.py
+  materials:
+    title: Guía y workflow de la misión 03
+    revision: 1
+    instructions:
+    - Conserva los archivos del kit de misión 02; completa únicamente Orders.
+    - Agrega el workflow de esta misión y ejecútalo con la misión 03 activa.
+    - Si usabas el kit anterior y tus consumidores siguen como stubs, usa los consumidores base de esta descarga.
+      Conserva cualquier solución propia ya implementada.
+    files:
+    - source: starter/mission-03.md
+      destination: MISSION-03.md
+    - source: starter/app-integration-tests.yml
+      destination: .github/workflows/app-integration-tests.yml
+    - source: starter/payments.py
+      destination: game-packs/aws-event-driven/functions/payments/handler.py
+    - source: starter/inventory.py
+      destination: game-packs/aws-event-driven/functions/inventory/handler.py
+  description: Completa Orders para guardar una orden y publicar OrderCreated. Los consumidores vienen preparados
+    para el recorrido básico.
+  instructions:
+  - 'Implementa functions/orders/handler.py: conserva orderId, customerId y total; guarda CREATED y createdAt en
+    DynamoDB.'
+  - Publica OrderCreated con source com.cloudopsarena.orders en el bus configurado.
+  - Ejecuta el workflow de misión 03. El juez comprueba las dos colas y los consumidores preparados con recursos
+    de prueba aislados.
+- id: mission-04
+  coin_reward: 10
+  hints:
+  - id: hint-1
+    title: Un evento repetido
+    cost: 3
+    content: Antes de registrar una operación, intenta aceptar su identificador con una escritura condicional en
+      la tabla de idempotencia. Un duplicado válido debe terminar sin repetir el efecto.
+  - id: hint-2
+    title: Fallo parcial y recuperación
+    cost: 6
+    content: batchItemFailures debe contener únicamente los messageId fallidos. Cuando FAIL_PAYMENTS esté activo,
+      falla antes de registrar la operación. Las operaciones aceptadas se notifican por OPERATIONS_URL.
+  title: Evita duplicados y recupera el flujo
+  type: incident
+  category: resilience
+  duration_minutes: 15
+  points: 30
+  workflow: .github/workflows/lab-integration-tests.yml
+  evaluation:
+    validator: aws-event-driven-resilience-v1
+    source_files:
+    - game-packs/aws-event-driven/functions/orders/handler.py
+    - game-packs/aws-event-driven/functions/payments/handler.py
+    - game-packs/aws-event-driven/functions/inventory/handler.py
+    required_files:
+    - .github/workflows/lab-integration-tests.yml
+    - game-packs/aws-event-driven/functions/orders/handler.py
+    - game-packs/aws-event-driven/functions/payments/handler.py
+    - game-packs/aws-event-driven/functions/inventory/handler.py
+  materials:
+    title: Guía y workflow de la misión 04
+    revision: 1
+    instructions:
+    - Añade el workflow de misión 04 y consulta MISSION-04.md; conserva las soluciones de misión 03.
+    - Registra cada operación de negocio simulada mediante OPERATIONS_URL, solo después de aceptar la orden como
+      nueva.
+    - Los duplicados deben ser éxitos sin repetir operaciones. Payments debe fallar antes de registrar nada cuando
+      FAIL_PAYMENTS=true.
+    - Usa Actions → Evaluar misión 04 en Arena → Run workflow con el mismo ARENA_EVENT_ID y la misión 04 activa.
+    files:
+    - source: starter/mission-04.md
+      destination: MISSION-04.md
+    - source: starter/lab-integration-tests.yml
+      destination: .github/workflows/lab-integration-tests.yml
+  description: Corrige los consumidores para aceptar cada operación una sola vez y recuperarse de fallos de Payments.
+  instructions:
+  - En Payments e Inventory, convierte la escritura de idempotencia en una escritura condicional. Los duplicados
+    deben ser éxitos sin repetir operaciones.
+  - Conserva el fallo controlado de Payments antes de registrar nada y reporta solo los messageId fallidos del lote.
+  - Ejecuta el workflow de misión 04 para comprobar duplicados, reintentos, DLQ y recuperación en el laboratorio
+    aislado del juez.
+github_workflows:
+  .github/workflows/terraform-lab.yml: mission-02
+  .github/workflows/app-integration-tests.yml: mission-03
+  .github/workflows/lab-integration-tests.yml: mission-04
+closing_minutes: 5
+legacy_coin_rewards:
+  mission-05: 10
+  mission-06: 10
+
+architecture:
+  title: Un pedido, dos consumidores independientes
+  subtitle: Orders → EventBridge → SQS → Payments e Inventory → DynamoDB
+  pipeline:
+  - GitHub
+  - GitHub Actions
+  - Arena · evaluador aislado
+  - Terraform
+  - Floci
+  nodes:
+  - id: client
+    label: Solicitud de pedido
+    service: Cliente
+    kind: client
+    x: 5
+    y: 220
+    detail: Inicia el recorrido. Los jueces de las misiones 03/04 invocan handlers con
+      solicitudes de prueba; no se publica un API Gateway en este laboratorio.
+  - id: orders
+    label: Orders
+    service: Lambda
+    kind: compute
+    x: 190
+    y: 220
+    detail: Valida el pedido, guarda su estado en DynamoDB y publica OrderCreated. Es
+      el handler que completas en la misión 03.
+  - id: events
+    label: OrderCreated
+    service: EventBridge
+    kind: event
+    x: 370
+    y: 220
+    detail: Distribuye el evento a Payments e Inventory. Cada consumidor trabaja de
+      manera independiente.
+  - id: paymentsq
+    label: Payments Queue
+    service: SQS
+    kind: queue
+    x: 550
+    y: 110
+    detail: Desacopla la creación del pedido de su cobro y conserva mensajes para reintentos.
+  - id: inventoryq
+    label: Inventory Queue
+    service: SQS
+    kind: queue
+    x: 550
+    y: 340
+    detail: Permite procesar el inventario sin bloquear el flujo de pagos.
+  - id: payments
+    label: Payments
+    service: Lambda
+    kind: compute
+    x: 735
+    y: 110
+    detail: Procesa la operación simulada de pago y registra el evento en la tabla de
+      idempotencia. En la misión 04 añades protección contra eventos duplicados y compruebas
+      fallos parciales.
+  - id: inventory
+    label: Inventory
+    service: Lambda
+    kind: compute
+    x: 735
+    y: 340
+    detail: Procesa la operación simulada de inventario y registra el evento en la tabla
+      de idempotencia. Debe reconocer duplicados sin repetir la operación.
+  - id: idempotency
+    label: Idempotencia
+    service: DynamoDB
+    kind: database
+    x: 925
+    y: 250
+    detail: Tabla compartida por Payments e Inventory. Guarda las claves de eventos
+      procesados por cada consumidor; no son dos tablas de negocio independientes.
+  - id: ordersdb
+    label: Orders
+    service: DynamoDB
+    kind: database
+    x: 190
+    y: 430
+    detail: Almacena el pedido y su estado CREATED.
+  - id: paymentsdlq
+    label: Payments DLQ
+    service: SQS
+    kind: queue
+    x: 550
+    y: 220
+    detail: Recibe mensajes que agotan los reintentos. La misión 04 comprueba su recuperación.
+  - id: inventorydlq
+    label: Inventory DLQ
+    service: SQS
+    kind: queue
+    x: 550
+    y: 460
+    detail: Aísla mensajes que Inventory no logra procesar después del límite de reintentos.
+  edges:
+  - to: orders
+    from: client
+  - to: events
+    from: orders
+  - to: ordersdb
+    from: orders
+  - to: paymentsq
+    from: events
+  - to: inventoryq
+    from: events
+  - to: payments
+    from: paymentsq
+  - to: inventory
+    from: inventoryq
+  - to: idempotency
+    from: payments
+  - to: idempotency
+    from: inventory
+  - to: paymentsdlq
+    dashed: true
+    from: paymentsq
+  - to: inventorydlq
+    dashed: true
+    from: inventoryq
+  note: Orders guarda el pedido y publica OrderCreated. EventBridge lo distribuye a
+    dos colas; Payments e Inventory procesan sus mensajes y comparten una tabla de idempotencia.
+    Las DLQ aíslan los fallos persistentes.

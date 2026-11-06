@@ -20,9 +20,9 @@ after(()=>{if(root)rmSync(root,{recursive:true,force:true});});
 test('timer shows closure at zero and preserves paused seconds',()=>{
  assert.equal(formatTime(65),'01:05');
  const expired=renderToString(React.createElement(Timer,{clock:{server_now:100,deadline:100,remaining_seconds:0,paused:false,closed:true}}));
- assert.ok(expired.includes('MISIÓN CERRADA')&&expired.includes('00:00'));
+ assert.ok(expired.includes('Misión cerrada')&&expired.includes('00:00'));
  const paused=renderToString(React.createElement(Timer,{clock:{server_now:100,deadline:120,remaining_seconds:20,paused:true,closed:false}}));
- assert.ok(paused.includes('RELOJ EN PAUSA')&&paused.includes('00:20'));
+ assert.ok(paused.includes('En pausa')&&paused.includes('00:20'));
 });
 test('shop hides unpurchased content and blocks purchase after deadline',()=>{
  const props={token:'test',mission:'mission',hints:[{id:'hint',title:'Orientation',cost:3,purchased:false,content:'PRIVATE HINT'}],balance:10,closed:true,onChanged:async()=>{}};
@@ -33,4 +33,9 @@ test('shop hides unpurchased content and blocks purchase after deadline',()=>{
  const owned=renderToString(React.createElement(Shop,{...props,hints:[{...props.hints[0],purchased:true}]}));
  assert.ok(owned.includes('PRIVATE HINT'));
  assert.ok(!owned.includes('Comprar por'));
+});
+test('waiting room timer has no countdown and asks for instructor start',()=>{
+ const waiting=renderToString(React.createElement(Timer,{clock:{server_now:100,deadline:null,remaining_seconds:null,paused:false,closed:true,waiting:true}}));
+ assert.ok(waiting.includes('Por iniciar')&&waiting.includes('Esperando al instructor'));
+ assert.ok(!waiting.includes('00:00')&&!waiting.includes('Misión cerrada'));
 });

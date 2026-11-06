@@ -41,9 +41,8 @@ clean shutdown/restart persistence and another order after resume. Full cycles
 were ~115 seconds; combined container peak 6.25 GiB. Operator-only reference
 template, no participant code, public endpoints or scoring. HTTP API Gateway
 entry, live-lab incidents, shared evaluator admission, durable scheduling,
-participant console/auth and 50-session load remain pending. New one-hour pack
-is deliberately `game-packs/aws-event-driven-60/manifest.draft.yaml`, outside
-the catalog. Preserve existing pack/events. Preprovision before a one-hour event;
+participant console/auth and 50-session load remain pending. The initial one-hour draft has since been replaced by the published
+`game-packs/aws-event-driven-60/manifest.yaml` (see update below). Preserve event progress. Preprovision before a one-hour event;
 do not imply 50 simultaneous VMs. See `docs/playgrounds.md` and recorded report.
 
 Playground integration deployed (2026-11-05): `compose.playgrounds.yaml` adds a
@@ -57,9 +56,8 @@ inventory, resume, third-VM rejection, revocation and end-event disk cleanup.
 An unrelated concurrent request was preserved. Expiry is two hours after initial
 request; finished events revoke reads immediately and clean up after work stops.
 Use `scripts/deploy-edge.sh` (all three Compose files), not base-only deployment.
-API suite: 190 passed; web session/render tests and TS/Vite passed. The one-hour
-pack stays draft pending participant-code updates, managed-Lambda incidents,
-live-lab evidence/scoring, prewarming and 50-session tests. See docs/playgrounds.md.
+API suite: 190 passed; web session/render tests and TS/Vite passed. The one-hour pack is now published with the existing ephemeral runtime graders;
+managed-Lambda incidents, prewarming and 50-session tests remain pending. See docs/playgrounds.md.
 
 Playground provenance correction (2026-11-05): the public reference-template
 prepare/refresh flow was withdrawn after it misleadingly showed infrastructure
@@ -151,3 +149,50 @@ docs/validation/lab-experience-2026-11-06.json. No secrets or existing scores re
 - `game-packs/aws-event-driven/manifest.yaml` — first Game Pack contract.
 - `infra/local/compose.yaml` — development environment.
 - `docs/event-day-runbook.md` — operational guidance.
+
+One-hour program and workspace (2026-11-06 UTC): `aws-event-driven-60` is now the
+default published pack: four missions, 5/15/20/15 minutes plus 5 closing, 75 points.
+Retained mission IDs, workflow mappings and scoring contracts are unchanged.
+Mission03 asks for Orders; prepared consumers pass its happy path but fail
+mission04 duplicate protection (verified in real VMs). Runtime03/04 still use
+ephemeral fixtures, not persistent Lambda updates. Protected migration changes
+only event META while paused and rejects incompatible contracts/in-flight jobs.
+The two previously open events were migrated without changing completion/score/
+hint/wallet records; finished histories keep the original six-mission pack.
+Participant UI uses a light workspace, mission navigation and four task tabs.
+221 API tests, 8 web tests, TS/Vite and Firefox desktop/mobile checks passed.
+See docs/short-workshop.md.
+
+Arena style and projection (2026-11-06): user preferred the previous dark palette;
+restored it with mission cards, focus/timer panel, retaining the four missions'
+content unchanged. Pack-defined interactive architecture uses the actual shared
+idempotency table (not two independent consumer tables) and distinguishes the
+diagram from verified deployment inventory. Admin can publish/revoke a per-event
+`/clasificacion/<random-token>` projection. Public API allowlists display names,
+ranks/scores and event summaries, checks a current 192-bit token, no-store.
+Polling every 3 seconds, equal ranks for ties, connection/last-update status.
+See docs/leaderboard-screen.md.
+
+Automatic progression (2026-11-06): API lifespan checks open, timed events every
+2 seconds. Conditional updates advance exactly one mission with its full duration,
+guarding original status/pack/mission/deadline against races. Paused/untimed events
+do not advance. Last expiry marks mission_sequence_complete without finishing the
+event, preserving accepted deliveries and wrap-up lab reads. Manual activation
+clears that marker. No scores/completions are written by the scheduler. Participant
+auto-selects the newly active mission; instructor polls every 5 seconds.
+See docs/workshop-experience.md.
+
+Waiting room (2026-11-06): newly created events stay open for registration with
+missions_started=false, empty active_mission_id and no deadline. Clock reports
+waiting/closed (no new deliveries); scheduler ignores waiting rooms. Instructor
+starts mission01 via existing activate-mission, setting missions_started=true
+and full duration. Opening/resuming alone never starts the first mission. Legacy
+events lacking this flag retain their behavior; do not reset existing progress.
+UI shows Esperando al instructor / Por iniciar and Iniciar misión 1.
+
+Ranking tiebreak (2026-11-06): all three boards share ranked_teams: score descending,
+latest positive approved-response timestamp ascending. New technical award
+receipts atomically store answered_at from the accepted evaluation created_at,
+so queue time does not penalize participants. Historical receipts fall back to
+created_at; missing/unreconciled timing sorts after verified timing, then stable
+team ID. Zero-point retries/failures do not affect order. No points are migrated.

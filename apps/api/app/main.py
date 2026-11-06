@@ -15,6 +15,7 @@ from boto3.dynamodb.types import TypeSerializer
 from boto3.dynamodb.conditions import Attr
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .config import settings
@@ -29,11 +30,13 @@ from .actions import router as actions_router
 from .live_evaluations import router as live_evaluations_router
 from .playgrounds import router as playgrounds_router
 from .hints import router as hints_router,wallet,catalog
+from .ranking import ranked_teams
 from .mission_clock import clock,require_time,deadline_condition
+from .mission_scheduler import mission_scheduler_lifespan
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cloudops-arena")
-app = FastAPI(title=settings.app_name, version="0.1.1", description="Reusable, Game Pack-driven technology GameDay platform")
+app = FastAPI(lifespan=mission_scheduler_lifespan, title=settings.app_name, version="0.1.1", description="Reusable, Game Pack-driven technology GameDay platform")
 app.include_router(evaluations_router)
 app.include_router(materials_router)
 app.include_router(github_router)
@@ -94,9 +97,13 @@ class ActivateMissionRequest(BaseModel):
     duration_minutes: int | None = Field(default=None,ge=1,le=240)
 
 
+class EventPackRequest(BaseModel):
+    game_pack:str=Field(min_length=3,max_length=80,pattern=r'^[A-Za-z0-9_-]+$')
+
+
 class EventCreateRequest(BaseModel):
     title: str = Field(min_length=4, max_length=100)
-    game_pack: str = Field(default="aws-event-driven", min_length=3, max_length=80)
+    game_pack: str = Field(default="aws-event-driven-60", min_length=3, max_length=80)
     participation_mode: Literal["individual", "team"] = "team"
     team_size: int = Field(default=5, ge=2, le=6)
     max_participants: int = Field(default=100, ge=1, le=500)
@@ -544,13 +551,14 @@ def participant_dashboard(principal: dict = Depends(require_participant)):
         missions.append({**mission, "completed": mission_id in completed, "active": is_active, "closed":is_active and timing['closed'], "locked": not is_active and mission_id not in completed})
     queue=queue_summary(rows)
     return {
-        "event": {"event_id": event_id, "title": event.get("title"), "status": event.get("status"), "active_mission_id": event.get("active_mission_id"), "participation_mode": event.get("participation_mode", "team")},
+        "event": {"event_id": event_id, "title": event.get("title"), "status": event.get("status"), "active_mission_id": event.get("active_mission_id"), "missions_started": event.get("missions_started",True), "participation_mode": event.get("participation_mode", "team")},
         "team": {
             "team_id": team["team_id"], "name": team["name"], "score": int(team.get("score", 0)),
             "github_repo_name": team.get("repo_name", ""), "github_repo_url": team.get("repo_url", ""),
             "github_repo_link_awarded": repository_link_awarded,
         },
         "missions": missions,
+        "program":{'id':pack.get('id'),'duration_minutes':pack.get('duration_minutes'),'architecture':pack.get('architecture')},
         "mission_clock":timing,
         "wallet":wallet(pack,rows,principal['team_id']),
         "hints":catalog(pack,rows,principal['team_id']),
@@ -588,9 +596,55 @@ def answer_mission(mission_id: str, body: AnswerRequest, principal: dict = Depen
 @app.get("/api/v1/leaderboard")
 def leaderboard(principal: dict = Depends(require_participant)):
     rows = query_partition(f"EVENT#{principal['event_id']}")
-    teams = [x for x in rows if x.get("type") == "team"]
-    teams.sort(key=lambda x: int(x.get("score", 0)), reverse=True)
+    teams = ranked_teams(rows)
     return {"leaderboard": [{"rank": i + 1, "team_id": t["team_id"], "name": t["name"], "score": int(t.get("score", 0)), "is_mine": t["team_id"] == principal["team_id"]} for i, t in enumerate(teams)]}
+
+
+@app.post('/api/v1/admin/events/{event_id}/leaderboard-screen')
+def share_leaderboard(event_id: str, _: dict = Depends(require_admin)):
+    if not get_item('EVENT#'+event_id, 'META'):
+        raise HTTPException(404, 'No encontramos el evento.')
+    # Concurrent opens reuse the winning token. The public index is repairable.
+    result = table_resource().update_item(
+        Key={'PK':'EVENT#'+event_id,'SK':'META'},
+        UpdateExpression='SET leaderboard_token=if_not_exists(leaderboard_token,:token)',
+        ExpressionAttributeValues={':token':secrets.token_urlsafe(24)},
+        ConditionExpression='attribute_exists(PK)', ReturnValues='ALL_NEW')
+    token = result['Attributes']['leaderboard_token']
+    table_resource().put_item(Item={'PK':'SCREEN#'+token,'SK':'META','type':'leaderboard-screen','event_id':event_id})
+    return {'path':'/clasificacion/'+token}
+
+
+@app.delete('/api/v1/admin/events/{event_id}/leaderboard-screen')
+def revoke_leaderboard(event_id: str, _: dict = Depends(require_admin)):
+    event = get_item('EVENT#'+event_id,'META')
+    if not event:
+        raise HTTPException(404,'No encontramos el evento.')
+    token = event.get('leaderboard_token')
+    if token:
+        table_resource().update_item(Key={'PK':'EVENT#'+event_id,'SK':'META'},
+            UpdateExpression='REMOVE leaderboard_token', ConditionExpression='leaderboard_token=:token',
+            ExpressionAttributeValues={':token':token})
+        table_resource().delete_item(Key={'PK':'SCREEN#'+token,'SK':'META'})
+    return {'revoked':True}
+
+
+@app.get('/api/v1/screens/{token}')
+def public_leaderboard_screen(token: str):
+    if not re.fullmatch(r'[A-Za-z0-9_-]{32}',token):
+        raise HTTPException(404,'El enlace del marcador no está disponible.')
+    index = get_item('SCREEN#'+token,'META')
+    event = get_item('EVENT#'+index['event_id'],'META') if index else None
+    if not event or not secrets.compare_digest(event.get('leaderboard_token',''),token):
+        raise HTTPException(404,'El enlace del marcador no está disponible.')
+    teams=ranked_teams(query_partition('EVENT#'+index['event_id']))
+    ranking=[{'rank':i+1,'name':row['name'],'score':int(row.get('score',0))} for i,row in enumerate(teams)]
+    pack=load_pack(event.get('game_pack','aws-event-driven'))
+    mission=get_mission(pack,event.get('active_mission_id',''))
+    return JSONResponse({'title':event['title'],'status':event['status'],
+        'participation_mode':event.get('participation_mode','team'),
+        'mission':mission['title'] if mission else None,'updated_at':now_iso(),'leaderboard':ranking},
+        headers={'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'})
 
 
 @app.get("/api/v1/admin/lab-providers/health")
@@ -612,7 +666,7 @@ def admin_game_packs(_: dict = Depends(require_admin)):
     for manifest in root.glob("*/manifest.yaml"):
         try:
             pack = load_pack(manifest.parent.name)
-            packs.append({"id": pack.get("id"), "title": pack.get("title"), "version": pack.get("version"), "difficulty": pack.get("difficulty"), "missions": len(pack.get("missions", []))})
+            packs.append({"id": pack.get("id"), "title": pack.get("title"), "version": pack.get("version"), "difficulty": pack.get("difficulty"), "duration_minutes":pack.get('duration_minutes'), "missions": len(pack.get("missions", []))})
         except Exception as exc:
             logger.warning("Skipping invalid Game Pack %s: %s", manifest, exc)
     return {"game_packs": packs}
@@ -626,7 +680,6 @@ def create_event(body: EventCreateRequest, _: dict = Depends(require_admin)):
         raise HTTPException(404, "Game Pack not found")
     event_id = str(uuid.uuid4())
     event_code = "ARENA-" + secrets.token_hex(4).upper()
-    first_mission = pack.get("missions", [{}])[0].get("id")
     created = now_iso()
     if body.participation_mode == "team" and body.max_participants < 2:
         raise HTTPException(422, "Un evento por equipos necesita capacidad para al menos dos participantes.")
@@ -634,12 +687,11 @@ def create_event(body: EventCreateRequest, _: dict = Depends(require_admin)):
     table_resource().put_item(Item={
         "PK": f"EVENT#{event_id}", "SK": "META", "type": "event",
         "event_id": event_id, "event_code": event_code, "title": body.title,
-        "game_pack": body.game_pack, "status": "open", "active_mission_id": first_mission,
+        "game_pack": body.game_pack, "status": "open", "active_mission_id": "", "missions_started": False,
         "participation_mode": body.participation_mode,
         "team_size": 1 if body.participation_mode == "individual" else body.team_size,
         "max_participants": body.max_participants, "max_teams": max_teams,
         "participant_count": 0, "team_count": 0, "created_at": created,
-        "mission_deadline":int(time.time())+int(pack.get('missions',[{}])[0].get('duration_minutes',15))*60,
     }, ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)")
     table_resource().put_item(Item={
         "PK": f"EVENTCODE#{event_code}", "SK": "EVENT", "type": "event-code-lookup",
@@ -789,12 +841,11 @@ def admin_dashboard(_: dict = Depends(require_admin)):
         return {"event": None, "teams": [], "participants": 0, "submissions": 0}
     event = sorted(events, key=lambda x: x.get("created_at", ""), reverse=True)[0]
     rows = query_partition(f"EVENT#{event['event_id']}")
-    teams = [x for x in rows if x.get("type") == "team"]
-    teams.sort(key=lambda x: int(x.get("score", 0)), reverse=True)
+    teams = ranked_teams(rows)
     participants = [x for x in rows if x.get("type") == "participant"]
     submissions = [x for x in rows if x.get("type") == "submission"]
     return {
-        "event": {k: event.get(k) for k in ("event_id", "title", "status", "active_mission_id", "game_pack", "participation_mode", "team_size", "max_participants")},
+        "event": {k: event.get(k) for k in ("event_id", "title", "status", "active_mission_id", "missions_started", "game_pack", "participation_mode", "team_size", "max_participants")},
         "evaluation_queue": {key:value for key,value in queue_summary(rows).items() if key!='positions'},
         "participants": len(participants),
         "submissions": len(submissions),
@@ -834,12 +885,39 @@ def activate_mission(event_id: str, body: ActivateMissionRequest, _: dict = Depe
     mission=get_mission(pack, body.mission_id)
     if not mission:
         raise HTTPException(404, "Mission not found in Game Pack")
+    if event.get('missions_started') is False and body.mission_id!=pack['missions'][0]['id']:
+        raise HTTPException(409,'Inicia primero la misión 1 para comenzar el taller.')
     table_resource().update_item(
         Key={"PK": f"EVENT#{event_id}", "SK": "META"},
-        UpdateExpression="SET active_mission_id = :mission, updated_at = :now, mission_deadline = :deadline, mission_remaining = :remaining",
-        ExpressionAttributeValues={":mission": body.mission_id, ":now": now_iso(),':deadline':int(time.time())+(body.duration_minutes or int(mission.get('duration_minutes',15)))*60,':remaining':(body.duration_minutes or int(mission.get('duration_minutes',15)))*60},
+        UpdateExpression="SET missions_started = :started, active_mission_id = :mission, updated_at = :now, mission_deadline = :deadline, mission_remaining = :remaining REMOVE mission_sequence_complete",
+        ExpressionAttributeValues={":started": True, ":mission": body.mission_id, ":now": now_iso(),':deadline':int(time.time())+(body.duration_minutes or int(mission.get('duration_minutes',15)))*60,':remaining':(body.duration_minutes or int(mission.get('duration_minutes',15)))*60},
     )
     return {"event_id": event_id, "active_mission_id": body.mission_id}
+
+
+@app.post('/api/v1/admin/events/{event_id}/game-pack')
+def change_event_pack(event_id:str,body:EventPackRequest,_:dict=Depends(require_admin)):
+    event=get_item('EVENT#'+event_id,'META')
+    if not event:raise HTTPException(404,'No encontramos el evento.')
+    if event.get('game_pack')==body.game_pack:return {'game_pack':body.game_pack,'preserved_progress':True}
+    if event.get('status') not in {'paused','finished'}:raise HTTPException(409,'Pausa el evento antes de cambiar el programa.')
+    try:target=load_pack(body.game_pack)
+    except (FileNotFoundError,ValueError):raise HTTPException(404,'Ese programa no está disponible.')
+    original=load_pack(event.get('game_pack','aws-event-driven'))
+    old={m['id']:m for m in original['missions']};new={m['id']:m for m in target['missions']}
+    for mission_id in old.keys()&new.keys():
+        for key in ('type','points','workflow_points','repository_link_points','workflow'):
+            if old[mission_id].get(key)!=new[mission_id].get(key):raise HTTPException(409,'La migración cambiaría un contrato o puntaje existente.')
+    rows=query_partition('EVENT#'+event_id)
+    if any(row.get('type')=='evaluation' and row.get('status') in {'pending','preparing','running'} for row in rows):
+        raise HTTPException(409,'Espera a que terminen las entregas registradas antes de cambiar el programa.')
+    active=event.get('active_mission_id')
+    if active not in new and event.get('missions_started') is not False:raise HTTPException(409,'Activa primero una misión que exista en ambos programas.')
+    table_resource().update_item(Key={'PK':'EVENT#'+event_id,'SK':'META'},
+        UpdateExpression='SET game_pack=:target, migrated_from_pack=:old, updated_at=:now',
+        ConditionExpression='game_pack=:old AND #s=:state AND active_mission_id=:active',
+        ExpressionAttributeNames={'#s':'status'},ExpressionAttributeValues={':target':body.game_pack,':old':event.get('game_pack','aws-event-driven'),':now':now_iso(),':state':event['status'],':active':active})
+    return {'game_pack':body.game_pack,'missions':len(new),'preserved_progress':True}
 
 
 @app.post("/api/v1/admin/demo/award")
